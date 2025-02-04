@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UK & US Cities Map</title>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css" />
+  <!-- Bootstrap CSS (for the modal) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+  <!-- Leaflet Awesome Markers CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <!-- The Map Container -->
+  <div id="map"></div>
+
+  <!-- Modal for listing US cities when clicking on a UK marker -->
+  <div class="modal fade" id="cityModal" tabindex="-1" aria-labelledby="cityModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content shadow">
+        <div class="modal-header">
+          <h5 class="modal-title" id="cityModalLabel">US Cities named <span id="modalCityName"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <ul id="alternativeList" class="list-group">
+            <!-- US city list items will be inserted here dynamically -->
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <!-- jQuery (for convenience) -->
+  <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+  <!-- Bootstrap Bundle JS (includes Popper) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- PapaParse for CSV parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+  <!-- Leaflet Awesome Markers JS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+  
+  <script>
+    // Define our custom icons using AwesomeMarkers:
+    var defaultIconUS = L.AwesomeMarkers.icon({
+      icon: 'info-sign',
+      markerColor: 'blue',
+      prefix: 'glyphicon'
+    });
+    var defaultIconUK = L.AwesomeMarkers.icon({
+      icon: 'info-sign',
+      markerColor: 'red',
+      prefix: 'glyphicon'
+    });
+    var highlightIcon = L.AwesomeMarkers.icon({
+      icon: 'star',
+      markerColor: 'orange',
+      prefix: 'glyphicon'
+    });
+    
+    // Initialize the Leaflet map (default view centered over the USA)
+    var map = L.map('map').setView([39.50, -98.35], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(map);
+
+    // Global lookup object: keys are lowercased city names; values are arrays of { marker, data }
+    var cityLookup = {};
+
+    // Helper function to add a marker and store it in the lookup.
+    function addCityMarker(cityData) {
+      var lat = parseFloat(cityData.latitude);
+      var lng = parseFloat(cityData.longitude);
+      
+      // Choose icon based on country.
+      var icon = (cityData.Country === "US") ? defaultIconUS : defaultIconUK;
+      var marker = L.marker([lat, lng], { icon: icon }).addTo(map);
+      marker.bindPopup("<strong>" + cityData.City + "</strong> (" + cityData.Country +
+                         (cityData.State ? ", " + cityData.State : "") + ")");
+      
+      var key = cityData.City.toLowerCase();
+      if (!cityLookup[key]) {
+        cityLookup[key] = [];
+      }
+      cityLookup[key].push({ marker: marker, data: cityData });
+      
+      // Attach click behavior to the marker.
+      marker.on('click', function() {
+        var entries = cityLookup[key];
+        // If this marker is from the US, look for a corresponding UK entry.
+        if (cityData.Country === "US") {
+          var ukEntry = entries.find(function(entry) {
+            return entry.data.Country === "UK";
+          });
+          if (ukEntry) {
+            // Highlight the UK marker.
+            ukEntry.marker.setIcon(highlightIcon);
+            map.flyTo([ukEntry.data.latitude, ukEntry.data.longitude], 10, { duration: 1.5 });
+            // Optionally, drop a temporary highlighted marker.
+            L.marker([ukEntry.data.latitude, ukEntry.data.longitude], { icon: highlightIcon })
+              .addTo(map)
+              .bindPopup("<strong>" + ukEntry.data.City + " (UK)</strong>").openPopup();
+            // After 3 seconds, revert the UK marker's icon.
+            setTimeout(function() {
+              ukEntry.marker.setIcon(defaultIconUK);
+            }, 3000);
+            return;
+          }
+        }
+        // If this marker is from the UK and there are US entries, display a modal list.
+        if (cityData.Country === "UK") {
+          var usEntries = entries.filter(function(entry) {
+            return entry.data.Country === "US";
+          });
+          if (usEntries.length > 0) {
+            $('#modalCityName').text(cityData.City);
+            var $list = $('#alternativeList');
+            $list.empty();
+            usEntries.forEach(function(entry) {
+              var itemText = entry.data.City + " in " + entry.data.State;
+              var $item = $('<li class="list-group-item list-group-item-action" style="cursor:pointer;"></li>');
+              $item.text(itemText);
+              $item.on('click', function() {
+                // Highlight the chosen US marker.
+                entry.marker.setIcon(highlightIcon);
+                map.flyTo([entry.data.latitude, entry.data.longitude], 10, { duration: 1.5 });
+                bootstrap.Modal.getInstance(document.getElementById('cityModal')).hide();
+                setTimeout(function() {
+                  entry.marker.setIcon(defaultIconUS);
+                }, 3000);
+              });
+              $list.append($item);
+            });
+            var cityModal = new bootstrap.Modal(document.getElementById('cityModal'));
+            cityModal.show();
+            return;
+          }
+        }
+        // Otherwise, just open the marker's popup.
+        marker.openPopup();
+      });
+    }
+
+    // Load the CSV file (cities_with_both_coords.csv) using PapaParse.
+    Papa.parse("cities_with_both_coords.csv", {
+      download: true,
+      header: true,
+      complete: function(results) {
+        results.data.forEach(function(row) {
+          if (row.latitude && row.longitude) {
+            addCityMarker(row);
+          }
+        });
+      },
+      error: function(err) {
+        console.error("Error loading CSV:", err);
+      }
+    });
+  </script>
+</body>
+</html>
