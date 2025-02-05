@@ -68,7 +68,7 @@
   
   <script>
     /*************************************
-     * Global Variables & Custom Icons *
+     * Global Variables & Custom Icons   *
      *************************************/
     var defaultIconUS = L.AwesomeMarkers.icon({
       icon: 'info-sign',
@@ -103,48 +103,57 @@
     var allMarkers = [];    // Flat array of all marker entries
     var usStatesSet = new Set(); // Collect all unique US states
     
-    /*******************************************************************
-     * Fly To Function (also highlights the flown-to marker temporarily)*
-     *******************************************************************/
+    /********************************************************************
+     * Fly To Function: Finds exact marker by lat/lng & highlights it.  *
+     ********************************************************************/
     function flyToLocation(lat, lng, cityName, country) {
       console.log("flyToLocation called with:", lat, lng, cityName, country);
       map.flyTo([lat, lng], 10, { duration: 1.5 });
 
-      // Attempt to find the corresponding marker(s)
-      if (!cityName) return; // fallback if cityName isn't provided
+      // If cityName wasn't passed, just fly the map & return
+      if (!cityName) return;
 
       var key = cityName.toLowerCase().trim();
       var entries = cityLookup[key] || [];
-      // Filter for the correct country if provided
-      if (country) {
-        entries = entries.filter(function(e) { return e.data.Country === country; });
-      }
-      // If found, highlight the first matching marker
-      if (entries.length > 0) {
-        var marker = entries[0].marker; 
-        var originalIcon = marker.options.icon;
-        marker.setIcon(highlightIcon);
 
-        // Revert icon after 2 seconds
+      // Filter by country if provided
+      if (country) {
+        entries = entries.filter(function(e) {
+          return e.data.Country === country;
+        });
+      }
+
+      // Find the entry matching the same lat/lng
+      var foundEntry = entries.find(function(e) {
+        return parseFloat(e.data.latitude) === parseFloat(lat) &&
+               parseFloat(e.data.longitude) === parseFloat(lng);
+      });
+
+      if (foundEntry) {
+        var marker = foundEntry.marker;
+        var originalIcon = marker.options.icon;
+        // Temporarily highlight the marker
+        marker.setIcon(highlightIcon);
         setTimeout(function() {
           marker.setIcon(originalIcon);
         }, 2000);
       }
     }
-    window.flyToLocation = flyToLocation; // Make global for inline onclick
+    // Make global for inline onclick usage
+    window.flyToLocation = flyToLocation;
     
     /********************************************
      * Helper Function: Add a Marker            *
      ********************************************/
     function addCityMarker(cityData) {
-      // Some rows only have 4 columns (UK rows), so we might need to remap
+      // Some rows only have 4 columns (UK rows), so we remap
       if (cityData.longitude === undefined) {
         cityData = {
           State: "",
-          City: cityData.State,          
-          Country: cityData.City,        
-          latitude: cityData.Country,    
-          longitude: cityData.latitude   
+          City: cityData.State,
+          Country: cityData.City,
+          latitude: cityData.Country,
+          longitude: cityData.latitude
         };
       }
       
@@ -166,7 +175,7 @@
       cityLookup[key].push(entry);
       allMarkers.push(entry);
       
-      // Record US state
+      // Record US state if available
       if (cityData.Country === "US" && cityData.State) {
         usStatesSet.add(cityData.State);
       }
@@ -180,12 +189,12 @@
         }, 2000);
 
         // Build the popup
-        var entries = cityLookup[key]; // all same-named cities
+        var entries = cityLookup[key]; // all markers with same city name
         var usEntries = entries.filter(e => e.data.Country === "US");
         var ukEntries = entries.filter(e => e.data.Country === "UK");
 
         // 1) Popup Title: "CityName, State" (if US) or "CityName, UK" (if UK)
-        var titleLine = cityData.City; // The specific marker that was clicked
+        var titleLine = cityData.City; // the specific marker that was clicked
         if (cityData.Country === "US" && cityData.State) {
           titleLine += ", " + cityData.State;
         } else if (cityData.Country === "UK") {
@@ -195,12 +204,13 @@
         var content = "<strong>" + titleLine + "</strong><br>";
         content += "Coordinates: " + lat.toFixed(4) + ", " + lng.toFixed(4) + "<br><br>";
 
-        // 2) If there's a US version, show them
+        // 2) If there's a US version, list them
         if (usEntries.length > 0) {
           content += "<u>US:</u><br>";
           usEntries.forEach(function(e) {
             var s = (e.data.State) ? e.data.State : "Unknown";
             content += "State: " + s + "<br>";
+            // Note: pass in e.data.latitude, e.data.longitude, e.data.City, "US"
             content += "<button class='btn btn-sm btn-primary m-1' onclick='flyToLocation("
               + e.data.latitude + ", "
               + e.data.longitude + ", "
@@ -211,11 +221,10 @@
           content += "<br>";
         }
 
-        // 3) If there's a UK version, show that
+        // 3) If there's a UK version, list it
         if (ukEntries.length > 0) {
           content += "<u>UK:</u><br>";
-          // Possibly each row is the same city name, so we use the first
-          // or you could loop if multiple UK entries
+          // Potentially multiple UK entries (same city name). Just show first or loop
           var ukCityData = ukEntries[0].data;
           content += "<button class='btn btn-sm btn-secondary m-1' onclick='flyToLocation("
             + ukCityData.latitude + ", "
@@ -233,6 +242,7 @@
      * Filtering: Update Marker Visibility         *
      ***********************************************/
     function updateMarkersVisibility() {
+      // Gather which US states are checked
       var selectedStates = [];
       $('#us-states-filter input[type=checkbox]').each(function() {
         if (this.checked) {
@@ -249,16 +259,19 @@
         var shouldShow = false;
         
         if (country === "US") {
+          // Show if the state is checked
           shouldShow = selectedStates.includes(state);
         } else if (country === "UK") {
+          // Show UK marker only if user toggled UK
+          // AND there is a matching US city that is shown
           var key = entry.data.City.toLowerCase().trim();
           var matchingUS = cityLookup[key].filter(function(e) {
             return e.data.Country === "US" && selectedStates.includes(e.data.State);
           });
-          // Show UK marker only if user toggled UK *and* there's a matching US city that is shown
           shouldShow = (matchingUS.length > 0) && showUK;
         }
         
+        // Toggle marker on the map accordingly
         if (shouldShow) {
           if (!map.hasLayer(marker)) {
             marker.addTo(map);
@@ -279,6 +292,7 @@
       var states = Array.from(usStatesSet).sort();
       states.forEach(function(state) {
         var checkboxId = 'state-' + state.replace(/\s+/g, '_');
+        // Create the checkbox + label
         var $checkbox = $(
           '<input type="checkbox" id="' + checkboxId + 
           '" value="' + state + '" checked> '
@@ -286,11 +300,13 @@
         var $label = $('<label for="' + checkboxId + '"> ' + state + '</label><br/>');
         $container.append($checkbox).append($label);
         
+        // Listen to changes
         $checkbox.on('change', function() {
           updateMarkersVisibility();
         });
       });
       
+      // Listen for UK toggle
       $('#toggleUK').on('change', function() {
         updateMarkersVisibility();
       });
@@ -320,13 +336,14 @@
           return row;
         });
 
+        // Add a marker for each row that has lat/lng
         remappedData.forEach(function(row) {
-          // Make sure we have lat/lng
           if (row.latitude && row.longitude) {
             addCityMarker(row);
           }
         });
         
+        // Build the filter panel after all markers are created
         buildFilterPanel();
       },
       error: function(err) {
