@@ -61,6 +61,11 @@
   <!-- Filter Panel -->
   <div id="filter-panel">
     <h5>Filter Markers</h5>
+    
+    <!-- "Select All" Button for US States -->
+    <div class="mb-2">
+      <button type="button" class="btn btn-sm btn-primary" id="selectAllStates">Select All States</button>
+    </div>
 
     <!-- US States Filter -->
     <div>
@@ -134,7 +139,8 @@
     var usStatesSet = new Set(); // Collect all unique US states
 
     /********************************************************************
-     * Fly To Function: Finds exact marker by lat/lng & highlights it.  *
+     * Fly To Function: Finds exact marker by lat/lng, adds it if necessary,
+     * highlights it temporarily, then re-applies filtering.
      ********************************************************************/
     function flyToLocation(lat, lng, cityName, country) {
       console.log("flyToLocation called with:", lat, lng, cityName, country);
@@ -144,7 +150,6 @@
 
       var key = cityName.toLowerCase().trim();
       var entries = cityLookup[key] || [];
-
       if (country) {
         entries = entries.filter(function(e) {
           return e.data.Country === country;
@@ -158,19 +163,26 @@
 
       if (foundEntry) {
         var marker = foundEntry.marker;
+        // If the marker is not visible because of filtering, add it temporarily.
+        if (!map.hasLayer(marker)) {
+          marker.addTo(map);
+        }
         var originalIcon = marker.options.icon;
         marker.setIcon(highlightIcon);
         setTimeout(function() {
           marker.setIcon(originalIcon);
+          // Reapply filtering so that markers not meant to be visible are removed.
+          updateMarkersVisibility();
         }, 2000);
       }
     }
-    window.flyToLocation = flyToLocation;
+    window.flyToLocation = flyToLocation; // Make global for inline onclick usage
 
     /********************************************
      * Helper Function: Add a Marker            *
      ********************************************/
     function addCityMarker(cityData) {
+      // Remap UK rows (only 4 columns) if necessary.
       if (cityData.longitude === undefined) {
         cityData = {
           State: "",
@@ -299,6 +311,9 @@
      ***********************************************/
     function buildFilterPanel() {
       var $container = $('#us-states-filter');
+      // Add "Select All" button at the top (if not already added via separate element)
+      // (We already added a separate button outside this function.)
+      
       var states = Array.from(usStatesSet).sort();
       states.forEach(function(state) {
         var checkboxId = 'state-' + state.replace(/\s+/g, '_');
@@ -364,7 +379,6 @@
         // Remove duplicates by label
         var deduped = {};
         matchedItems.forEach(function(item) {
-          // If this label hasn't been added yet, add it.
           if (!deduped[item.label]) {
             deduped[item.label] = item;
           }
@@ -422,6 +436,12 @@
       error: function(err) {
         console.error("Error loading CSV:", err);
       }
+    });
+
+    // "Select All" button for US states
+    $('#selectAllStates').on('click', function() {
+      $('#us-states-filter input[type=checkbox]').prop('checked', true);
+      updateMarkersVisibility();
     });
   </script>
 </body>
