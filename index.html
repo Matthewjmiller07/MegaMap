@@ -32,7 +32,25 @@
       max-height: 90%;
       overflow-y: auto;
       font-size: 0.9rem;
-      width: 220px;
+      width: 240px; /* slightly wider to accommodate the search box */
+    }
+    /* Style the search results list */
+    #searchResults {
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      display: none; /* hidden by default */
+      margin-top: 5px;
+      padding-left: 0; /* remove default list padding */
+    }
+    #searchResults li {
+      list-style: none;
+      padding: 5px;
+      cursor: pointer;
+    }
+    #searchResults li:hover {
+      background-color: #f0f0f0;
     }
   </style>
 </head>
@@ -43,15 +61,26 @@
   <!-- Filter Panel -->
   <div id="filter-panel">
     <h5>Filter Markers</h5>
+
+    <!-- US States Filter -->
     <div>
       <strong>US States:</strong>
       <div id="us-states-filter">
         <!-- Checkboxes and "Only" buttons will be generated here -->
       </div>
     </div>
+
+    <!-- Toggle UK -->
     <div class="mt-2">
       <input type="checkbox" id="toggleUK" checked>
       <label for="toggleUK">Show UK markers</label>
+    </div>
+
+    <!-- Search Box -->
+    <div class="mt-3">
+      <label for="citySearch" class="form-label">Search City:</label>
+      <input type="text" id="citySearch" class="form-control form-control-sm" placeholder="Type to search...">
+      <ul id="searchResults"></ul>
     </div>
   </div>
 
@@ -99,11 +128,11 @@
     /**********************************************************
      * Global Data Structures for Marker Storage & Filtering *
      **********************************************************/
-    // cityLookup[cityNameLower] = array of { marker, data }
+    // cityLookup[ cityNameLower ] = array of { marker, data }
     var cityLookup = {};
-    var allMarkers = [];    // Flat array of all marker entries
+    var allMarkers = [];      // Flat array of all marker entries
     var usStatesSet = new Set(); // Collect all unique US states
-    
+
     /********************************************************************
      * Fly To Function: Finds exact marker by lat/lng & highlights it.  *
      ********************************************************************/
@@ -111,20 +140,17 @@
       console.log("flyToLocation called with:", lat, lng, cityName, country);
       map.flyTo([lat, lng], 10, { duration: 1.5 });
 
-      // If cityName wasn't passed, just fly the map & return
       if (!cityName) return;
 
       var key = cityName.toLowerCase().trim();
       var entries = cityLookup[key] || [];
 
-      // Filter by country if provided
       if (country) {
         entries = entries.filter(function(e) {
           return e.data.Country === country;
         });
       }
 
-      // Find the entry matching the same lat/lng
       var foundEntry = entries.find(function(e) {
         return parseFloat(e.data.latitude) === parseFloat(lat) &&
                parseFloat(e.data.longitude) === parseFloat(lng);
@@ -133,21 +159,18 @@
       if (foundEntry) {
         var marker = foundEntry.marker;
         var originalIcon = marker.options.icon;
-        // Temporarily highlight the marker
         marker.setIcon(highlightIcon);
         setTimeout(function() {
           marker.setIcon(originalIcon);
         }, 2000);
       }
     }
-    // Make global for inline onclick usage
     window.flyToLocation = flyToLocation;
-    
+
     /********************************************
      * Helper Function: Add a Marker            *
      ********************************************/
     function addCityMarker(cityData) {
-      // Some rows only have 4 columns (UK rows), so we remap
       if (cityData.longitude === undefined) {
         cityData = {
           State: "",
@@ -163,11 +186,9 @@
       var cityName = cityData.City;
       console.log("Adding marker for:", cityName, cityData);
       
-      // Choose the icon
       var icon = (cityData.Country === "US") ? defaultIconUS : defaultIconUK;
       var marker = L.marker([lat, lng], { icon: icon }).addTo(map);
       
-      // Store in cityLookup by cityNameLower
       var key = cityName.toLowerCase().trim();
       if (!cityLookup[key]) {
         cityLookup[key] = [];
@@ -176,12 +197,10 @@
       cityLookup[key].push(entry);
       allMarkers.push(entry);
       
-      // Record US state if available
       if (cityData.Country === "US" && cityData.State) {
         usStatesSet.add(cityData.State);
       }
       
-      // On marker click, show a popup & highlight the clicked marker
       marker.on('click', function() {
         var originalIcon = marker.options.icon;
         marker.setIcon(highlightIcon);
@@ -189,13 +208,11 @@
           marker.setIcon(originalIcon);
         }, 2000);
 
-        // Build the popup
-        var entries = cityLookup[key]; // all markers with same city name
+        var entries = cityLookup[key];
         var usEntries = entries.filter(e => e.data.Country === "US");
         var ukEntries = entries.filter(e => e.data.Country === "UK");
 
-        // 1) Popup Title: "CityName, State" (if US) or "CityName, UK" (if UK)
-        var titleLine = cityData.City; // the specific marker that was clicked
+        var titleLine = cityData.City;
         if (cityData.Country === "US" && cityData.State) {
           titleLine += ", " + cityData.State;
         } else if (cityData.Country === "UK") {
@@ -205,13 +222,11 @@
         var content = "<strong>" + titleLine + "</strong><br>";
         content += "Coordinates: " + lat.toFixed(4) + ", " + lng.toFixed(4) + "<br><br>";
 
-        // 2) If there's a US version, list them
         if (usEntries.length > 0) {
           content += "<u>US:</u><br>";
           usEntries.forEach(function(e) {
             var s = (e.data.State) ? e.data.State : "Unknown";
             content += "State: " + s + "<br>";
-            // Note: pass in e.data.latitude, e.data.longitude, e.data.City, "US"
             content += "<button class='btn btn-sm btn-primary m-1' onclick='flyToLocation("
               + e.data.latitude + ", "
               + e.data.longitude + ", "
@@ -222,10 +237,8 @@
           content += "<br>";
         }
 
-        // 3) If there's a UK version, list it
         if (ukEntries.length > 0) {
           content += "<u>UK:</u><br>";
-          // Potentially multiple UK entries (same city name). Just show first or loop
           var ukCityData = ukEntries[0].data;
           content += "<button class='btn btn-sm btn-secondary m-1' onclick='flyToLocation("
             + ukCityData.latitude + ", "
@@ -243,7 +256,6 @@
      * Filtering: Update Marker Visibility         *
      ***********************************************/
     function updateMarkersVisibility() {
-      // Gather which US states are checked
       var selectedStates = [];
       $('#us-states-filter input[type=checkbox]').each(function() {
         if (this.checked) {
@@ -260,11 +272,8 @@
         var shouldShow = false;
         
         if (country === "US") {
-          // Show if the state is checked
           shouldShow = selectedStates.includes(state);
         } else if (country === "UK") {
-          // Show UK marker only if user toggled UK
-          // AND there is a matching US city that is shown
           var key = entry.data.City.toLowerCase().trim();
           var matchingUS = cityLookup[key].filter(function(e) {
             return e.data.Country === "US" && selectedStates.includes(e.data.State);
@@ -272,7 +281,6 @@
           shouldShow = (matchingUS.length > 0) && showUK;
         }
         
-        // Toggle marker on the map accordingly
         if (shouldShow) {
           if (!map.hasLayer(marker)) {
             marker.addTo(map);
@@ -294,39 +302,89 @@
       var states = Array.from(usStatesSet).sort();
       states.forEach(function(state) {
         var checkboxId = 'state-' + state.replace(/\s+/g, '_');
-
-        // Create the checkbox + label
         var $checkbox = $(
           '<input type="checkbox" id="' + checkboxId + 
           '" value="' + state + '" checked> '
         );
         var $label = $('<label for="' + checkboxId + '"> ' + state + '</label>');
-        
-        // Create the "Only" button
         var $onlyBtn = $('<button type="button" class="btn btn-sm btn-link ms-1">Only</button>');
-        // Clicking "Only" unchecks all other states and checks just this one
         $onlyBtn.on('click', function() {
-          // Uncheck all checkboxes
           $('#us-states-filter input[type=checkbox]').prop('checked', false);
-          // Check only this state's checkbox
           $checkbox.prop('checked', true);
-          // Update marker visibility
           updateMarkersVisibility();
         });
 
-        // Add all elements to the filter panel
-        // a <br> after each state line
         $container.append($checkbox).append($label).append($onlyBtn).append('<br/>');
-
-        // Also handle the regular check/uncheck event
         $checkbox.on('change', function() {
           updateMarkersVisibility();
         });
       });
       
-      // Listen for UK toggle
       $('#toggleUK').on('change', function() {
         updateMarkersVisibility();
+      });
+    }
+    
+    /***********************************************
+     * Search Functionality
+     * Displays matching cities as you type, removing duplicates.
+     ***********************************************/
+    function setupCitySearch() {
+      var $searchInput = $('#citySearch');
+      var $resultsList = $('#searchResults');
+
+      $searchInput.on('input', function() {
+        var query = $(this).val().toLowerCase().trim();
+        $resultsList.empty();
+
+        if (!query) {
+          $resultsList.hide();
+          return;
+        }
+
+        var matchedItems = [];
+        // Iterate over every marker entry
+        allMarkers.forEach(function(entry) {
+          var dispCity = entry.data.City;
+          var dispState = (entry.data.Country === "US" && entry.data.State) 
+                          ? (", " + entry.data.State) 
+                          : (entry.data.Country === "UK" ? ", UK" : "");
+          var label = dispCity + dispState;
+          if (label.toLowerCase().indexOf(query) !== -1) {
+            matchedItems.push({
+              label: label,
+              lat: entry.data.latitude,
+              lng: entry.data.longitude,
+              city: entry.data.City,
+              country: entry.data.Country
+            });
+          }
+        });
+
+        // Remove duplicates by label
+        var deduped = {};
+        matchedItems.forEach(function(item) {
+          // If this label hasn't been added yet, add it.
+          if (!deduped[item.label]) {
+            deduped[item.label] = item;
+          }
+        });
+        matchedItems = Object.values(deduped);
+
+        if (matchedItems.length > 0) {
+          matchedItems.slice(0, 20).forEach(function(item) {
+            var $li = $('<li>' + item.label + '</li>');
+            $li.on('click', function() {
+              $resultsList.hide();
+              $searchInput.val('');
+              flyToLocation(item.lat, item.lng, item.city, item.country);
+            });
+            $resultsList.append($li);
+          });
+          $resultsList.show();
+        } else {
+          $resultsList.hide();
+        }
       });
     }
     
@@ -339,8 +397,6 @@
       dynamicTyping: true,
       complete: function(results) {
         var data = results.data;
-        // If row.longitude is undefined, it indicates a UK row with only 4 columns
-        // so we do a quick remap to unify structure:
         var remappedData = data.map(function(row) {
           if (row.longitude === undefined) {
             return {
@@ -354,15 +410,14 @@
           return row;
         });
 
-        // Add a marker for each row that has lat/lng
         remappedData.forEach(function(row) {
           if (row.latitude && row.longitude) {
             addCityMarker(row);
           }
         });
         
-        // Build the filter panel after all markers are created
         buildFilterPanel();
+        setupCitySearch();
       },
       error: function(err) {
         console.error("Error loading CSV:", err);
