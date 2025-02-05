@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>UK & US Cities Map with Filters</title>
+  <title>UK & US Cities Map with Info and Fly Buttons</title>
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css" />
-  <!-- Bootstrap CSS (for modal and filter panel styling) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+  <!-- Bootstrap CSS (for styling and the filter panel) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" />
   <!-- Leaflet Awesome Markers CSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css" />
   <style>
     html, body {
       margin: 0;
@@ -20,7 +20,7 @@
       width: 100%;
       height: 100%;
     }
-    /* Simple styling for the filter panel */
+    /* Filter panel styling */
     #filter-panel {
       position: absolute;
       top: 10px;
@@ -36,38 +36,21 @@
   </style>
 </head>
 <body>
-  <!-- The Map Container -->
+  <!-- Map Container -->
   <div id="map"></div>
-
+  
   <!-- Filter Panel -->
   <div id="filter-panel">
     <h5>Filter Markers</h5>
     <div>
       <strong>US States:</strong>
       <div id="us-states-filter">
-        <!-- Dynamically generated checkboxes will appear here -->
+        <!-- Checkboxes will be generated here -->
       </div>
     </div>
     <div class="mt-2">
       <input type="checkbox" id="toggleUK" checked>
       <label for="toggleUK">Show UK markers</label>
-    </div>
-  </div>
-
-  <!-- Modal for listing US cities when clicking on a UK marker -->
-  <div class="modal fade" id="cityModal" tabindex="-1" aria-labelledby="cityModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content shadow">
-        <div class="modal-header">
-          <h5 class="modal-title" id="cityModalLabel">US Cities named <span id="modalCityName"></span></h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <ul id="alternativeList" class="list-group">
-            <!-- List items inserted here dynamically -->
-          </ul>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -84,9 +67,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
   
   <script>
-    /***********************
-     * Define custom icons *
-     ***********************/
+    /*************************************
+     * Global Variables & Custom Icons *
+     *************************************/
     var defaultIconUS = L.AwesomeMarkers.icon({
       icon: 'info-sign',
       markerColor: 'blue',
@@ -106,38 +89,76 @@
     /******************************
      * Initialize the Leaflet Map *
      ******************************/
-    // Centered over the USA
     var map = L.map('map').setView([39.50, -98.35], 4);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 18
     }).addTo(map);
     
-    /*********************************************
-     * Global Data Structures for Marker Storage *
-     *********************************************/
-    // cityLookup: keys are lowercased city names; values are arrays of { marker, data }
+    /**********************************************************
+     * Global Data Structures for Marker Storage & Filtering *
+     **********************************************************/
+    // cityLookup[cityNameLower] = array of { marker, data }
     var cityLookup = {};
-    // allMarkers: flat array of all marker entries for filtering
-    var allMarkers = [];
-    // Set to hold all unique US states
-    var usStatesSet = new Set();
+    var allMarkers = [];    // Flat array of all marker entries
+    var usStatesSet = new Set(); // Collect all unique US states
     
-    /************************************
-     * Helper: Add Marker and Save Entry *
-     ************************************/
+    /*******************************************************************
+     * Fly To Function (also highlights the flown-to marker temporarily)*
+     *******************************************************************/
+    function flyToLocation(lat, lng, cityName, country) {
+      console.log("flyToLocation called with:", lat, lng, cityName, country);
+      map.flyTo([lat, lng], 10, { duration: 1.5 });
+
+      // Attempt to find the corresponding marker(s)
+      if (!cityName) return; // fallback if cityName isn't provided
+
+      var key = cityName.toLowerCase().trim();
+      var entries = cityLookup[key] || [];
+      // Filter for the correct country if provided
+      if (country) {
+        entries = entries.filter(function(e) { return e.data.Country === country; });
+      }
+      // If found, highlight the first matching marker
+      if (entries.length > 0) {
+        var marker = entries[0].marker; 
+        var originalIcon = marker.options.icon;
+        marker.setIcon(highlightIcon);
+
+        // Revert icon after 2 seconds
+        setTimeout(function() {
+          marker.setIcon(originalIcon);
+        }, 2000);
+      }
+    }
+    window.flyToLocation = flyToLocation; // Make global for inline onclick
+    
+    /********************************************
+     * Helper Function: Add a Marker            *
+     ********************************************/
     function addCityMarker(cityData) {
+      // Some rows only have 4 columns (UK rows), so we might need to remap
+      if (cityData.longitude === undefined) {
+        cityData = {
+          State: "",
+          City: cityData.State,          
+          Country: cityData.City,        
+          latitude: cityData.Country,    
+          longitude: cityData.latitude   
+        };
+      }
+      
       var lat = parseFloat(cityData.latitude);
       var lng = parseFloat(cityData.longitude);
+      var cityName = cityData.City;
+      console.log("Adding marker for:", cityName, cityData);
       
-      // Choose icon based on country.
+      // Choose the icon
       var icon = (cityData.Country === "US") ? defaultIconUS : defaultIconUK;
-      var marker = L.marker([lat, lng], { icon: icon });
-      marker.addTo(map);
-      marker.bindPopup("<strong>" + cityData.City + "</strong> (" + cityData.Country +
-                         (cityData.State ? ", " + cityData.State : "") + ")");
+      var marker = L.marker([lat, lng], { icon: icon }).addTo(map);
       
-      var key = cityData.City.toLowerCase();
+      // Store in cityLookup by cityNameLower
+      var key = cityName.toLowerCase().trim();
       if (!cityLookup[key]) {
         cityLookup[key] = [];
       }
@@ -145,96 +166,99 @@
       cityLookup[key].push(entry);
       allMarkers.push(entry);
       
-      // For US markers, record the state.
+      // Record US state
       if (cityData.Country === "US" && cityData.State) {
         usStatesSet.add(cityData.State);
       }
       
-      // Attach click behavior to the marker.
+      // On marker click, show a popup & highlight the clicked marker
       marker.on('click', function() {
-        var entries = cityLookup[key];
-        // If this marker is from the US, look for a corresponding UK entry.
-        if (cityData.Country === "US") {
-          var ukEntry = entries.find(function(entry) {
-            return entry.data.Country === "UK";
-          });
-          if (ukEntry) {
-            // Highlight the UK marker.
-            ukEntry.marker.setIcon(highlightIcon);
-            map.flyTo([ukEntry.data.latitude, ukEntry.data.longitude], 10, { duration: 1.5 });
-            // Optionally, drop a temporary highlighted marker.
-            L.marker([ukEntry.data.latitude, ukEntry.data.longitude], { icon: highlightIcon })
-              .addTo(map)
-              .bindPopup("<strong>" + ukEntry.data.City + " (UK)</strong>").openPopup();
-            // After 3 seconds, revert the UK marker's icon.
-            setTimeout(function() {
-              ukEntry.marker.setIcon(defaultIconUK);
-            }, 3000);
-            return;
-          }
+        var originalIcon = marker.options.icon;
+        marker.setIcon(highlightIcon);
+        setTimeout(function(){
+          marker.setIcon(originalIcon);
+        }, 2000);
+
+        // Build the popup
+        var entries = cityLookup[key]; // all same-named cities
+        var usEntries = entries.filter(e => e.data.Country === "US");
+        var ukEntries = entries.filter(e => e.data.Country === "UK");
+
+        // 1) Popup Title: "CityName, State" (if US) or "CityName, UK" (if UK)
+        var titleLine = cityData.City; // The specific marker that was clicked
+        if (cityData.Country === "US" && cityData.State) {
+          titleLine += ", " + cityData.State;
+        } else if (cityData.Country === "UK") {
+          titleLine += ", UK";
         }
-        // If this marker is from the UK and there are US entries, display a modal list.
-        if (cityData.Country === "UK") {
-          var usEntries = entries.filter(function(entry) {
-            return entry.data.Country === "US";
+
+        var content = "<strong>" + titleLine + "</strong><br>";
+        content += "Coordinates: " + lat.toFixed(4) + ", " + lng.toFixed(4) + "<br><br>";
+
+        // 2) If there's a US version, show them
+        if (usEntries.length > 0) {
+          content += "<u>US:</u><br>";
+          usEntries.forEach(function(e) {
+            var s = (e.data.State) ? e.data.State : "Unknown";
+            content += "State: " + s + "<br>";
+            content += "<button class='btn btn-sm btn-primary m-1' onclick='flyToLocation("
+              + e.data.latitude + ", "
+              + e.data.longitude + ", "
+              + "\"" + e.data.City + "\", "
+              + "\"US\""
+              + ")'>Fly to " + s + "</button><br>";
           });
-          if (usEntries.length > 0) {
-            $('#modalCityName').text(cityData.City);
-            var $list = $('#alternativeList');
-            $list.empty();
-            usEntries.forEach(function(entry) {
-              var itemText = entry.data.City + " in " + entry.data.State;
-              var $item = $('<li class="list-group-item list-group-item-action" style="cursor:pointer;"></li>');
-              $item.text(itemText);
-              $item.on('click', function() {
-                // Highlight the chosen US marker.
-                entry.marker.setIcon(highlightIcon);
-                map.flyTo([entry.data.latitude, entry.data.longitude], 10, { duration: 1.5 });
-                bootstrap.Modal.getInstance(document.getElementById('cityModal')).hide();
-                setTimeout(function() {
-                  entry.marker.setIcon(defaultIconUS);
-                }, 3000);
-              });
-              $list.append($item);
-            });
-            var cityModal = new bootstrap.Modal(document.getElementById('cityModal'));
-            cityModal.show();
-            return;
-          }
+          content += "<br>";
         }
-        // Otherwise, simply open the marker's popup.
-        marker.openPopup();
+
+        // 3) If there's a UK version, show that
+        if (ukEntries.length > 0) {
+          content += "<u>UK:</u><br>";
+          // Possibly each row is the same city name, so we use the first
+          // or you could loop if multiple UK entries
+          var ukCityData = ukEntries[0].data;
+          content += "<button class='btn btn-sm btn-secondary m-1' onclick='flyToLocation("
+            + ukCityData.latitude + ", "
+            + ukCityData.longitude + ", "
+            + "\"" + ukCityData.City + "\", "
+            + "\"UK\""
+            + ")'>Fly to UK</button>";
+        }
+
+        marker.bindPopup(content).openPopup();
       });
     }
     
     /***********************************************
-     * Update Marker Visibility Based on Filters  *
+     * Filtering: Update Marker Visibility         *
      ***********************************************/
     function updateMarkersVisibility() {
-      // Get selected US states from checkboxes.
       var selectedStates = [];
       $('#us-states-filter input[type=checkbox]').each(function() {
         if (this.checked) {
           selectedStates.push(this.value);
         }
       });
-      // Check if UK markers should be shown.
       var showUK = $('#toggleUK').is(':checked');
+      console.log("Filtering - Selected US states:", selectedStates, "Show UK:", showUK);
       
-      // For each marker entry, decide whether to show or hide it.
       allMarkers.forEach(function(entry) {
         var country = entry.data.Country;
         var state = entry.data.State;
         var marker = entry.marker;
         var shouldShow = false;
+        
         if (country === "US") {
-          // Show only if the marker's state is selected.
           shouldShow = selectedStates.includes(state);
         } else if (country === "UK") {
-          // Show or hide UK markers based on toggle.
-          shouldShow = showUK;
+          var key = entry.data.City.toLowerCase().trim();
+          var matchingUS = cityLookup[key].filter(function(e) {
+            return e.data.Country === "US" && selectedStates.includes(e.data.State);
+          });
+          // Show UK marker only if user toggled UK *and* there's a matching US city that is shown
+          shouldShow = (matchingUS.length > 0) && showUK;
         }
-        // Add or remove marker accordingly.
+        
         if (shouldShow) {
           if (!map.hasLayer(marker)) {
             marker.addTo(map);
@@ -248,37 +272,61 @@
     }
     
     /***********************************************
-     * Build the Filter Panel (US states checkboxes) *
+     * Build the Filter Panel (US states checkboxes)
      ***********************************************/
     function buildFilterPanel() {
       var $container = $('#us-states-filter');
-      // Convert the set to a sorted array.
       var states = Array.from(usStatesSet).sort();
       states.forEach(function(state) {
         var checkboxId = 'state-' + state.replace(/\s+/g, '_');
-        var $checkbox = $('<input type="checkbox" id="' + checkboxId + '" value="' + state + '" checked> ');
+        var $checkbox = $(
+          '<input type="checkbox" id="' + checkboxId + 
+          '" value="' + state + '" checked> '
+        );
         var $label = $('<label for="' + checkboxId + '"> ' + state + '</label><br/>');
         $container.append($checkbox).append($label);
-        // Attach change event
-        $checkbox.on('change', updateMarkersVisibility);
+        
+        $checkbox.on('change', function() {
+          updateMarkersVisibility();
+        });
       });
-      // Also attach event handler to the UK toggle.
-      $('#toggleUK').on('change', updateMarkersVisibility);
+      
+      $('#toggleUK').on('change', function() {
+        updateMarkersVisibility();
+      });
     }
     
     /***********************************************
-     * Load CSV and Build Markers & Filter Panel   *
+     * Load CSV & Build Markers and Filter Panel   *
      ***********************************************/
     Papa.parse("cities_with_both_coords.csv", {
       download: true,
       header: true,
+      dynamicTyping: true,
       complete: function(results) {
-        results.data.forEach(function(row) {
+        var data = results.data;
+        // If row.longitude is undefined, it indicates a UK row with only 4 columns
+        // so we do a quick remap to unify structure:
+        var remappedData = data.map(function(row) {
+          if (row.longitude === undefined) {
+            return {
+              State: "",
+              City: row.State,
+              Country: row.City,
+              latitude: row.Country,
+              longitude: row.latitude
+            };
+          }
+          return row;
+        });
+
+        remappedData.forEach(function(row) {
+          // Make sure we have lat/lng
           if (row.latitude && row.longitude) {
             addCityMarker(row);
           }
         });
-        // Now that markers are added and US states recorded, build the filter panel.
+        
         buildFilterPanel();
       },
       error: function(err) {
