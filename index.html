@@ -32,6 +32,7 @@
       max-height: 90%;
       overflow-y: auto;
       font-size: 0.9rem;
+      width: 220px;
     }
   </style>
 </head>
@@ -45,7 +46,7 @@
     <div>
       <strong>US States:</strong>
       <div id="us-states-filter">
-        <!-- Checkboxes will be generated here -->
+        <!-- Checkboxes and "Only" buttons will be generated here -->
       </div>
     </div>
     <div class="mt-2">
@@ -286,21 +287,38 @@
     
     /***********************************************
      * Build the Filter Panel (US states checkboxes)
+     * Adds an "Only" button next to each checkbox.
      ***********************************************/
     function buildFilterPanel() {
       var $container = $('#us-states-filter');
       var states = Array.from(usStatesSet).sort();
       states.forEach(function(state) {
         var checkboxId = 'state-' + state.replace(/\s+/g, '_');
+
         // Create the checkbox + label
         var $checkbox = $(
           '<input type="checkbox" id="' + checkboxId + 
           '" value="' + state + '" checked> '
         );
-        var $label = $('<label for="' + checkboxId + '"> ' + state + '</label><br/>');
-        $container.append($checkbox).append($label);
+        var $label = $('<label for="' + checkboxId + '"> ' + state + '</label>');
         
-        // Listen to changes
+        // Create the "Only" button
+        var $onlyBtn = $('<button type="button" class="btn btn-sm btn-link ms-1">Only</button>');
+        // Clicking "Only" unchecks all other states and checks just this one
+        $onlyBtn.on('click', function() {
+          // Uncheck all checkboxes
+          $('#us-states-filter input[type=checkbox]').prop('checked', false);
+          // Check only this state's checkbox
+          $checkbox.prop('checked', true);
+          // Update marker visibility
+          updateMarkersVisibility();
+        });
+
+        // Add all elements to the filter panel
+        // a <br> after each state line
+        $container.append($checkbox).append($label).append($onlyBtn).append('<br/>');
+
+        // Also handle the regular check/uncheck event
         $checkbox.on('change', function() {
           updateMarkersVisibility();
         });
