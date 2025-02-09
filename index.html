@@ -3,84 +3,81 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>UK & US Cities Map with Info and Fly Buttons</title>
+  <title>Combined Biblical & US/UK Cities Map</title>
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css" />
-  <!-- Bootstrap CSS (for styling and the filter panel) -->
+  <!-- Bootstrap CSS for the filter panel -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css" />
   <!-- Leaflet Awesome Markers CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css" />
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-    }
-    #map {
-      width: 100%;
-      height: 100%;
-    }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    #map { width: 100%; height: 100%; }
     /* Filter panel styling */
     #filter-panel {
       position: absolute;
       top: 10px;
       left: 10px;
-      z-index: 1000;
+      z-index: 1100;
       background: white;
       padding: 10px;
       border: 1px solid #ccc;
       max-height: 90%;
       overflow-y: auto;
       font-size: 0.9rem;
-      width: 240px; /* slightly wider to accommodate the search box */
+      width: 280px;
     }
-    /* Style the search results list */
+    /* Search results styling */
     #searchResults {
       max-height: 150px;
       overflow-y: auto;
       border: 1px solid #ddd;
       border-radius: 4px;
-      display: none; /* hidden by default */
+      display: none;
       margin-top: 5px;
-      padding-left: 0; /* remove default list padding */
+      padding-left: 0;
     }
-    #searchResults li {
-      list-style: none;
-      padding: 5px;
-      cursor: pointer;
-    }
-    #searchResults li:hover {
-      background-color: #f0f0f0;
-    }
+    #searchResults li { list-style: none; padding: 5px; cursor: pointer; }
+    #searchResults li:hover { background-color: #f0f0f0; }
   </style>
 </head>
 <body>
-  <!-- Map Container -->
+  <!-- Map container -->
   <div id="map"></div>
   
   <!-- Filter Panel -->
   <div id="filter-panel">
     <h5>Filter Markers</h5>
-    
-    <!-- "Select All" Button for US States -->
+    <!-- Map Mode Dropdown -->
     <div class="mb-2">
-      <button type="button" class="btn btn-sm btn-primary" id="selectAllStates">Select All States</button>
+      <label for="mapMode">Map Mode:</label>
+      <select id="mapMode" class="form-select form-select-sm">
+        <option value="All">All Markers</option>
+        <option value="Biblical">Biblical Only</option>
+        <option value="USBiblical">US Biblical Only</option>
+        <option value="Cities">Cities Only</option>
+      </select>
     </div>
-
     <!-- US States Filter -->
     <div>
       <strong>US States:</strong>
-      <div id="us-states-filter">
-        <!-- Checkboxes and "Only" buttons will be generated here -->
-      </div>
+      <div id="us-states-filter"></div>
+      <button type="button" class="btn btn-sm btn-primary mt-2" id="selectAllStates">Select All States</button>
     </div>
-
-    <!-- Toggle UK -->
+    <!-- Toggle UK Markers -->
     <div class="mt-2">
       <input type="checkbox" id="toggleUK" checked>
       <label for="toggleUK">Show UK markers</label>
     </div>
-
+    <!-- Toggle Advanced Biblical Markers -->
+    <div class="mt-2">
+      <input type="checkbox" id="toggleBiblicalAdvanced">
+      <label for="toggleBiblicalAdvanced">Show all biblical markers</label>
+    </div>
+    <!-- Zoom All Button -->
+    <div class="mt-2">
+      <button type="button" class="btn btn-sm btn-warning" id="zoomAllBtn">Zoom to All Markers</button>
+    </div>
     <!-- Search Box -->
     <div class="mt-3">
       <label for="citySearch" class="form-label">Search City:</label>
@@ -88,13 +85,13 @@
       <ul id="searchResults"></ul>
     </div>
   </div>
-
+  
   <!-- Scripts -->
-  <!-- jQuery (for convenience) -->
+  <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
-  <!-- Bootstrap Bundle JS (includes Popper) -->
+  <!-- Bootstrap Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- PapaParse for CSV parsing -->
+  <!-- PapaParse -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <!-- Leaflet JS -->
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
@@ -102,347 +99,509 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
   
   <script>
-    /*************************************
-     * Global Variables & Custom Icons   *
-     *************************************/
-    var defaultIconUS = L.AwesomeMarkers.icon({
-      icon: 'info-sign',
-      markerColor: 'blue',
-      prefix: 'glyphicon'
-    });
-    var defaultIconUK = L.AwesomeMarkers.icon({
-      icon: 'info-sign',
-      markerColor: 'red',
-      prefix: 'glyphicon'
-    });
-    var highlightIcon = L.AwesomeMarkers.icon({
-      icon: 'star',
-      markerColor: 'orange',
-      prefix: 'glyphicon'
-    });
+    /*****************************************************
+     * Helper: getBaseGroup(name)
+     * Returns a base group key for a given place name.
+     * It takes the part before a slash, lowercases it, removes any
+     * trailing digits, strips any parenthetical text and (optionally)
+     * removes the word "beach" so that “Rehoboth” and “Rehoboth Beach” group together.
+     *****************************************************/
+    function getBaseGroup(name) {
+      if (!name) return "";
+      let cleaned = name.split("/")[0].trim().toLowerCase();
+      // Remove trailing digits
+      cleaned = cleaned.replace(/\s*\d+$/, "");
+      // Remove parenthetical content
+      cleaned = cleaned.replace(/\(.*\)/, "").trim();
+      // Optionally remove the word "beach"
+      cleaned = cleaned.replace(/\bbeach\b/g, "").trim();
+      return cleaned;
+    }
     
-    /******************************
-     * Initialize the Leaflet Map *
-     ******************************/
+    /*****************************************************
+     * Global Variables & Icons
+     *****************************************************/
+    // CSV1 – Biblical Places (used only for fly‑to)
+    var biblicalData = []; // Each entry gets a property "groupKey"
+    // CSV2 – US Biblical Cities markers
+    var usBiblicalMarkers = []; // Each marker.myData includes { type:"usBiblical", label, state, lat, lng, groupKey }
+    // CSV3 – US/UK City markers
+    var cityMarkers = []; // Each marker.myData includes { type:"city", label, country, state, lat, lng, groupKey }
+    
+    // For filtering: collect US state names (from CSV2 and CSV3)
+    var usStatesSet = new Set();
+    
+    // Settings
+    var mapMode = "All"; // Options: "All", "Biblical", "USBiblical", "Cities"
+    var advancedBiblical = false; // If false, only show biblical entries with "Most Likely" confidence
+    
+    // Icons – adjust colors as desired
+    var iconBiblicalFly = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'green', prefix: 'glyphicon' });
+    var iconUSBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'purple', prefix: 'glyphicon' });
+    var iconCityUS = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'blue', prefix: 'glyphicon' });
+    var iconCityUK = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'red', prefix: 'glyphicon' });
+    var highlightIcon = L.AwesomeMarkers.icon({ icon: 'star', markerColor: 'orange', prefix: 'glyphicon' });
+    
+    // Initialize the map (centered on the US)
     var map = L.map('map').setView([39.50, -98.35], 4);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 18
     }).addTo(map);
     
-    /**********************************************************
-     * Global Data Structures for Marker Storage & Filtering *
-     **********************************************************/
-    // cityLookup[ cityNameLower ] = array of { marker, data }
-    var cityLookup = {};
-    var allMarkers = [];      // Flat array of all marker entries
-    var usStatesSet = new Set(); // Collect all unique US states
-
-    /********************************************************************
-     * Fly To Function: Finds exact marker by lat/lng, adds it if necessary,
-     * highlights it temporarily, then re-applies filtering.
-     ********************************************************************/
-    function flyToLocation(lat, lng, cityName, country) {
-      console.log("flyToLocation called with:", lat, lng, cityName, country);
-      map.flyTo([lat, lng], 10, { duration: 1.5 });
-
-      if (!cityName) return;
-
-      var key = cityName.toLowerCase().trim();
-      var entries = cityLookup[key] || [];
-      if (country) {
-        entries = entries.filter(function(e) {
-          return e.data.Country === country;
-        });
-      }
-
-      var foundEntry = entries.find(function(e) {
-        return parseFloat(e.data.latitude) === parseFloat(lat) &&
-               parseFloat(e.data.longitude) === parseFloat(lng);
-      });
-
-      if (foundEntry) {
-        var marker = foundEntry.marker;
-        // If the marker is not visible because of filtering, add it temporarily.
-        if (!map.hasLayer(marker)) {
-          marker.addTo(map);
-        }
-        var originalIcon = marker.options.icon;
-        marker.setIcon(highlightIcon);
-        setTimeout(function() {
-          marker.setIcon(originalIcon);
-          // Reapply filtering so that markers not meant to be visible are removed.
-          updateMarkersVisibility();
-        }, 2000);
-      }
-    }
-    window.flyToLocation = flyToLocation; // Make global for inline onclick usage
-
-    /********************************************
-     * Helper Function: Add a Marker            *
-     ********************************************/
-    function addCityMarker(cityData) {
-      // Remap UK rows (only 4 columns) if necessary.
-      if (cityData.longitude === undefined) {
-        cityData = {
-          State: "",
-          City: cityData.State,
-          Country: cityData.City,
-          latitude: cityData.Country,
-          longitude: cityData.latitude
-        };
-      }
-      
-      var lat = parseFloat(cityData.latitude);
-      var lng = parseFloat(cityData.longitude);
-      var cityName = cityData.City;
-      console.log("Adding marker for:", cityName, cityData);
-      
-      var icon = (cityData.Country === "US") ? defaultIconUS : defaultIconUK;
-      var marker = L.marker([lat, lng], { icon: icon }).addTo(map);
-      
-      var key = cityName.toLowerCase().trim();
-      if (!cityLookup[key]) {
-        cityLookup[key] = [];
-      }
-      var entry = { marker: marker, data: cityData };
-      cityLookup[key].push(entry);
-      allMarkers.push(entry);
-      
-      if (cityData.Country === "US" && cityData.State) {
-        usStatesSet.add(cityData.State);
-      }
-      
-      marker.on('click', function() {
-        var originalIcon = marker.options.icon;
-        marker.setIcon(highlightIcon);
-        setTimeout(function(){
-          marker.setIcon(originalIcon);
-        }, 2000);
-
-        var entries = cityLookup[key];
-        var usEntries = entries.filter(e => e.data.Country === "US");
-        var ukEntries = entries.filter(e => e.data.Country === "UK");
-
-        var titleLine = cityData.City;
-        if (cityData.Country === "US" && cityData.State) {
-          titleLine += ", " + cityData.State;
-        } else if (cityData.Country === "UK") {
-          titleLine += ", UK";
-        }
-
-        var content = "<strong>" + titleLine + "</strong><br>";
-        content += "Coordinates: " + lat.toFixed(4) + ", " + lng.toFixed(4) + "<br><br>";
-
-        if (usEntries.length > 0) {
-          content += "<u>US:</u><br>";
-          usEntries.forEach(function(e) {
-            var s = (e.data.State) ? e.data.State : "Unknown";
-            content += "State: " + s + "<br>";
-            content += "<button class='btn btn-sm btn-primary m-1' onclick='flyToLocation("
-              + e.data.latitude + ", "
-              + e.data.longitude + ", "
-              + "\"" + e.data.City + "\", "
-              + "\"US\""
-              + ")'>Fly to " + s + "</button><br>";
-          });
-          content += "<br>";
-        }
-
-        if (ukEntries.length > 0) {
-          content += "<u>UK:</u><br>";
-          var ukCityData = ukEntries[0].data;
-          content += "<button class='btn btn-sm btn-secondary m-1' onclick='flyToLocation("
-            + ukCityData.latitude + ", "
-            + ukCityData.longitude + ", "
-            + "\"" + ukCityData.City + "\", "
-            + "\"UK\""
-            + ")'>Fly to UK</button>";
-        }
-
-        marker.bindPopup(content).openPopup();
-      });
-    }
-    
-    /***********************************************
-     * Filtering: Update Marker Visibility         *
-     ***********************************************/
-    function updateMarkersVisibility() {
-      var selectedStates = [];
-      $('#us-states-filter input[type=checkbox]').each(function() {
-        if (this.checked) {
-          selectedStates.push(this.value);
-        }
-      });
-      var showUK = $('#toggleUK').is(':checked');
-      console.log("Filtering - Selected US states:", selectedStates, "Show UK:", showUK);
-      
-      allMarkers.forEach(function(entry) {
-        var country = entry.data.Country;
-        var state = entry.data.State;
-        var marker = entry.marker;
-        var shouldShow = false;
-        
-        if (country === "US") {
-          shouldShow = selectedStates.includes(state);
-        } else if (country === "UK") {
-          var key = entry.data.City.toLowerCase().trim();
-          var matchingUS = cityLookup[key].filter(function(e) {
-            return e.data.Country === "US" && selectedStates.includes(e.data.State);
-          });
-          shouldShow = (matchingUS.length > 0) && showUK;
-        }
-        
-        if (shouldShow) {
-          if (!map.hasLayer(marker)) {
-            marker.addTo(map);
-          }
+    /*****************************************************
+     * Utility: parseCoordinates()
+     * (swaps order if needed)
+     *****************************************************/
+    function parseCoordinates(coordStr, swap = false) {
+      coordStr = coordStr.trim();
+      if (!coordStr) return [];
+      var pairs = coordStr.split(" ").filter(s => s.trim() !== "");
+      return pairs.map(function(pair) {
+        var coords = pair.split(",");
+        if (swap) {
+          return [parseFloat(coords[1]), parseFloat(coords[0])];
         } else {
-          if (map.hasLayer(marker)) {
-            map.removeLayer(marker);
+          return [parseFloat(coords[0]), parseFloat(coords[1])];
+        }
+      });
+    }
+    function parseFirstCoordinate(coordStr, swap = false) {
+      var arr = parseCoordinates(coordStr, swap);
+      return (arr.length > 0) ? arr[0] : [0, 0];
+    }
+    
+    /*****************************************************
+     * CSV Loading
+     *****************************************************/
+    var biblicalDataLoaded = false, usBiblicalLoaded = false, cityDataLoaded = false;
+    
+    // --- CSV1: biblical_places_output.csv ---
+    Papa.parse("biblical_places_output.csv", {
+      download: true,
+      header: true,
+      complete: function(results) {
+        console.log("Loaded biblical_places_output.csv, rows:", results.data.length);
+        results.data.forEach(function(row) {
+          var rawName = row["Place Name"] || "";
+          if (!rawName) return;
+          var groupKey = getBaseGroup(rawName);
+          var coordStr = row["Coordinates"] || "";
+          // CSV1 coordinates are stored as "lng,lat" so we swap.
+          var latlngs = parseCoordinates(coordStr, true);
+          if (latlngs.length === 0) return;
+          var confidence = (row["Confidence Score"] || "").trim();
+          var refs = row["Biblical References URLs"] || "";
+          var entry = { 
+            rawName: rawName, 
+            confidence: confidence, 
+            refs: refs, 
+            coordinates: coordStr,
+            groupKey: groupKey
+          };
+          if (latlngs.length >= 3) {
+            entry.type = "biblical_polygon";
+            entry.latlngs = latlngs;
+            // Compute centroid for marker placement
+            var sum = latlngs.reduce((acc, pair) => [acc[0] + pair[0], acc[1] + pair[1]], [0, 0]);
+            entry.lat = sum[0] / latlngs.length;
+            entry.lng = sum[1] / latlngs.length;
+          } else {
+            entry.type = "biblical_marker";
+            entry.lat = latlngs[0][0];
+            entry.lng = latlngs[0][1];
           }
-        }
-      });
-    }
-    
-    /***********************************************
-     * Build the Filter Panel (US states checkboxes)
-     * Adds an "Only" button next to each checkbox.
-     ***********************************************/
-    function buildFilterPanel() {
-      var $container = $('#us-states-filter');
-      // Add "Select All" button at the top (if not already added via separate element)
-      // (We already added a separate button outside this function.)
-      
-      var states = Array.from(usStatesSet).sort();
-      states.forEach(function(state) {
-        var checkboxId = 'state-' + state.replace(/\s+/g, '_');
-        var $checkbox = $(
-          '<input type="checkbox" id="' + checkboxId + 
-          '" value="' + state + '" checked> '
-        );
-        var $label = $('<label for="' + checkboxId + '"> ' + state + '</label>');
-        var $onlyBtn = $('<button type="button" class="btn btn-sm btn-link ms-1">Only</button>');
-        $onlyBtn.on('click', function() {
-          $('#us-states-filter input[type=checkbox]').prop('checked', false);
-          $checkbox.prop('checked', true);
-          updateMarkersVisibility();
+          biblicalData.push(entry);
         });
-
-        $container.append($checkbox).append($label).append($onlyBtn).append('<br/>');
-        $checkbox.on('change', function() {
-          updateMarkersVisibility();
-        });
-      });
-      
-      $('#toggleUK').on('change', function() {
-        updateMarkersVisibility();
-      });
-    }
+        console.log("Biblical CSV1 entries loaded:", biblicalData.length);
+        biblicalDataLoaded = true;
+        checkAllLoaded();
+      },
+      error: function(err) { console.error("Error loading biblical_places_output.csv:", err); }
+    });
     
-    /***********************************************
-     * Search Functionality
-     * Displays matching cities as you type, removing duplicates.
-     ***********************************************/
-    function setupCitySearch() {
-      var $searchInput = $('#citySearch');
-      var $resultsList = $('#searchResults');
-
-      $searchInput.on('input', function() {
-        var query = $(this).val().toLowerCase().trim();
-        $resultsList.empty();
-
-        if (!query) {
-          $resultsList.hide();
-          return;
-        }
-
-        var matchedItems = [];
-        // Iterate over every marker entry
-        allMarkers.forEach(function(entry) {
-          var dispCity = entry.data.City;
-          var dispState = (entry.data.Country === "US" && entry.data.State) 
-                          ? (", " + entry.data.State) 
-                          : (entry.data.Country === "UK" ? ", UK" : "");
-          var label = dispCity + dispState;
-          if (label.toLowerCase().indexOf(query) !== -1) {
-            matchedItems.push({
+    // --- CSV2: biblical_places_us_updated.csv ---
+    Papa.parse("biblical_places_us_updated.csv", {
+      download: true,
+      header: true,
+      complete: function(results) {
+        console.log("Loaded biblical_places_us_updated.csv, rows:", results.data.length);
+        results.data.forEach(function(row) {
+          var rawName = row["Biblical Place Name"] || "";
+          if (!rawName) return;
+          // For CSV2, process each match in the "US Matching Cities" column.
+          var usMatching = row["US Matching Cities"] || "";
+          var matches = usMatching.split(";").map(s => s.trim());
+          matches.forEach(function(item) {
+            // Expected format: "City (State): lat,lng"
+            var parts = item.split(":");
+            if (parts.length < 2) return;
+            var label = parts[0].trim();
+            var coordPart = parts[1].trim();
+            var latlngArr = coordPart.split(",");
+            if (latlngArr.length < 2) return;
+            var lat = parseFloat(latlngArr[0]);
+            var lng = parseFloat(latlngArr[1]);
+            var stateMatch = label.match(/\(([^)]+)\)/);
+            var state = stateMatch ? stateMatch[1] : "";
+            if (state) { usStatesSet.add(state.toLowerCase()); }
+            var groupKey = getBaseGroup(label);
+            var entry = { 
+              type: "usBiblical",
               label: label,
-              lat: entry.data.latitude,
-              lng: entry.data.longitude,
-              city: entry.data.City,
-              country: entry.data.Country
-            });
-          }
-        });
-
-        // Remove duplicates by label
-        var deduped = {};
-        matchedItems.forEach(function(item) {
-          if (!deduped[item.label]) {
-            deduped[item.label] = item;
-          }
-        });
-        matchedItems = Object.values(deduped);
-
-        if (matchedItems.length > 0) {
-          matchedItems.slice(0, 20).forEach(function(item) {
-            var $li = $('<li>' + item.label + '</li>');
-            $li.on('click', function() {
-              $resultsList.hide();
-              $searchInput.val('');
-              flyToLocation(item.lat, item.lng, item.city, item.country);
-            });
-            $resultsList.append($li);
+              lat: lat,
+              lng: lng,
+              state: state,
+              groupKey: groupKey
+            };
+            // Create a marker for this CSV2 entry.
+            var marker = L.marker([lat, lng], { icon: iconUSBiblical });
+            marker.myData = entry;
+            marker.on('click', function() { showCombinedPopup(this); });
+            usBiblicalMarkers.push(marker);
           });
-          $resultsList.show();
-        } else {
-          $resultsList.hide();
-        }
-      });
-    }
+        });
+        console.log("US Biblical markers (CSV2) loaded:", usBiblicalMarkers.length);
+        usBiblicalLoaded = true;
+        checkAllLoaded();
+      },
+      error: function(err) { console.error("Error loading biblical_places_us_updated.csv:", err); }
+    });
     
-    /***********************************************
-     * Load CSV & Build Markers and Filter Panel   *
-     ***********************************************/
+    // --- CSV3: cities_with_both_coords.csv ---
     Papa.parse("cities_with_both_coords.csv", {
       download: true,
       header: true,
       dynamicTyping: true,
       complete: function(results) {
-        var data = results.data;
-        var remappedData = data.map(function(row) {
-          if (row.longitude === undefined) {
-            return {
-              State: "",
-              City: row.State,
-              Country: row.City,
-              latitude: row.Country,
-              longitude: row.latitude
-            };
-          }
-          return row;
+        console.log("Loaded cities_with_both_coords.csv, rows:", results.data.length);
+        results.data.forEach(function(row) {
+          var cityName = row["City"] || "";
+          if (!cityName) return;
+          var groupKey = getBaseGroup(cityName);
+          var country = (row["Country"] || "").toUpperCase();
+          var state = row["State"] || "";
+          if (country === "US" && state) { usStatesSet.add(state.toLowerCase()); }
+          var lat = parseFloat(row["latitude"]);
+          var lng = parseFloat(row["longitude"]);
+          var label = cityName + (state ? " (" + state + ")" : "");
+          var marker = L.marker([lat, lng], { icon: (country === "US") ? iconCityUS : iconCityUK });
+          marker.myData = { 
+            type: "city",
+            label: label,
+            country: country,
+            state: state,
+            lat: lat,
+            lng: lng,
+            groupKey: groupKey
+          };
+          marker.on('click', function() { showCombinedPopup(this); });
+          cityMarkers.push(marker);
         });
-
-        remappedData.forEach(function(row) {
-          if (row.latitude && row.longitude) {
-            addCityMarker(row);
-          }
-        });
-        
+        console.log("City markers (CSV3) loaded:", cityMarkers.length);
+        cityDataLoaded = true;
+        checkAllLoaded();
+      },
+      error: function(err) { console.error("Error loading cities_with_both_coords.csv:", err); }
+    });
+    
+    // When all CSVs are loaded, add CSV2 and CSV3 markers to the map.
+    function checkAllLoaded() {
+      if (biblicalDataLoaded && usBiblicalLoaded && cityDataLoaded) {
+        console.log("All CSV files loaded.");
+        // Add CSV2 markers (US Biblical)
+        usBiblicalMarkers.forEach(function(marker) { marker.addTo(map); });
+        // Add CSV3 markers (cities)
+        cityMarkers.forEach(function(marker) { marker.addTo(map); });
         buildFilterPanel();
         setupCitySearch();
-      },
-      error: function(err) {
-        console.error("Error loading CSV:", err);
+        updateMarkersVisibility();
       }
-    });
-
-    // "Select All" button for US states
-    $('#selectAllStates').on('click', function() {
-      $('#us-states-filter input[type=checkbox]').prop('checked', true);
-      updateMarkersVisibility();
-    });
+    }
+    
+    /*****************************************************
+     * Combined Popup Builder
+     * When a marker (from CSV2 or CSV3) is clicked, the popup shows:
+     *  - All US Biblical Cities (CSV2) with the same groupKey,
+     *  - All Biblical Places (CSV1) with the same groupKey (with a "Fly to Biblical" button),
+     *  - All US/UK Cities (CSV3) with the same groupKey.
+     * Duplicate entries are removed.
+     *****************************************************/
+    function showCombinedPopup(marker) {
+      var groupKey = marker.myData.groupKey;
+      var content = "<strong>" + marker.myData.label + "</strong><br><hr>";
+      
+      // US Biblical Cities Section (CSV2) – deduplicate by label + state.
+      var usBibList = usBiblicalMarkers.filter(function(m) {
+        return m.myData.groupKey === groupKey;
+      });
+      if (usBibList.length > 0) {
+        content += "<u>US Biblical Cities:</u><br>";
+        var seenUS = {};
+        usBibList.forEach(function(m) {
+          var d = m.myData;
+          var entryKey = d.label + " (State: " + (d.state || "N/A") + ")";
+          if (!seenUS[entryKey]) {
+            seenUS[entryKey] = true;
+            content += entryKey + "<br>" +
+              "<button class='btn btn-sm btn-primary mt-1' onclick='flyToLocation(" + d.lat + ", " + d.lng + ", \"" + d.label + "\", \"US Biblical\")'>Fly to US Biblical</button><br>";
+          }
+        });
+        content += "<br>";
+      }
+      
+      // Biblical Places Section (CSV1) – deduplicate by rawName.
+      var bibList = biblicalData.filter(function(entry) {
+        return entry.groupKey === groupKey;
+      });
+      if (bibList.length > 0) {
+        content += "<u>Biblical Places:</u><br>";
+        var seenBib = {};
+        bibList.forEach(function(entry) {
+          if (advancedBiblical || entry.confidence.toLowerCase() === "most likely") {
+            var entryKey = entry.rawName + " (Confidence: " + entry.confidence + ")";
+            if (!seenBib[entryKey]) {
+              seenBib[entryKey] = true;
+              content += entry.rawName + " (Confidence: " + entry.confidence + ")<br>" +
+                "<button class='btn btn-sm btn-success mt-1' onclick='flyToLocation(" + entry.lat + ", " + entry.lng + ", \"" + entry.rawName + "\", \"Biblical\")'>Fly to Biblical</button><br>";
+            }
+          }
+        });
+        content += "<br>";
+      }
+      
+      // US/UK Cities Section (CSV3) – deduplicate by label and country.
+      var cityList = cityMarkers.filter(function(m) {
+        return m.myData.groupKey === groupKey;
+      });
+      if (cityList.length > 0) {
+        content += "<u>US/UK Cities:</u><br>";
+        var seenCity = {};
+        cityList.forEach(function(m) {
+          var d = m.myData;
+          var entryKey = d.label + " (" + d.country + ")";
+          if (!seenCity[entryKey]) {
+            seenCity[entryKey] = true;
+            content += d.label + " (" + d.country + ")<br>" +
+              "<button class='btn btn-sm btn-secondary mt-1' onclick='flyToLocation(" + d.lat + ", " + d.lng + ", \"" + d.label + "\", \"City\")'>Fly to City</button><br>";
+          }
+        });
+      }
+      marker.bindPopup(content).openPopup();
+    }
+    
+    /*****************************************************
+     * Fly-To Functionality
+     * When a fly‑to button is clicked, the function first looks for an existing marker
+     * (by matching the groupKey) so that its full popup is used. If not found, it creates a new marker.
+     * If flying to a Biblical entry and polygon data exists, it displays the polygon temporarily.
+     *****************************************************/
+    function flyToLocation(lat, lng, name, type) {
+      var groupKey = getBaseGroup(name);
+      var foundMarker = null;
+      if (type === "US Biblical" || type === "Biblical") {
+        foundMarker = usBiblicalMarkers.find(function(m) {
+          return m.myData.groupKey === groupKey;
+        });
+      } else if (type === "City") {
+        foundMarker = cityMarkers.find(function(m) {
+          return m.myData.groupKey === groupKey;
+        });
+      }
+      if (!foundMarker) {
+        var origIcon;
+        if (type === "City") {
+          origIcon = iconCityUS;
+        } else if (type === "US Biblical") {
+          origIcon = iconUSBiblical;
+        } else if (type === "Biblical") {
+          origIcon = iconBiblicalFly;
+        }
+        foundMarker = L.marker([lat, lng], { icon: origIcon }).addTo(map);
+        foundMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey };
+        foundMarker.on('click', function() { showCombinedPopup(this); });
+        if (type === "City") {
+          cityMarkers.push(foundMarker);
+        } else {
+          usBiblicalMarkers.push(foundMarker);
+        }
+      }
+      // Temporarily highlight the marker.
+      var orig = foundMarker.options.icon;
+      foundMarker.setIcon(highlightIcon);
+      setTimeout(function(){
+        foundMarker.setIcon(orig);
+      }, 2000);
+      // If flying to a Biblical entry and polygon data exists, show the polygon temporarily.
+      if (type === "Biblical") {
+        var bibEntry = biblicalData.find(function(entry) {
+          return Math.abs(entry.lat - lat) < 0.0001 && Math.abs(entry.lng - lng) < 0.0001;
+        });
+        if (bibEntry && bibEntry.type === "biblical_polygon" && bibEntry.latlngs) {
+          var tempPoly = L.polygon(bibEntry.latlngs, { color: "green", weight: 3 }).addTo(map);
+          setTimeout(function() { map.removeLayer(tempPoly); }, 2000);
+        }
+      }
+      map.flyTo([lat, lng], 10, { duration: 1.5 });
+      console.log("Flying to " + name + " (" + type + ") with groupKey: " + groupKey + " at " + lat + ", " + lng);
+    }
+    window.flyToLocation = flyToLocation;
+    
+    /*****************************************************
+     * Update Marker Visibility (Filtering by state and mode)
+     *****************************************************/
+    function updateMarkersVisibility() {
+      var stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox]");
+      var selectedStates = [];
+      stateInputs.forEach(function(cb) {
+        if (cb.checked) { selectedStates.push(cb.value.trim().toLowerCase()); }
+      });
+      mapMode = document.getElementById("mapMode").value;
+      var toggleUK = document.getElementById("toggleUK").checked;
+      
+      // Update US Biblical markers (CSV2)
+      usBiblicalMarkers.forEach(function(marker) {
+        var d = marker.myData;
+        var show = true;
+        if (mapMode === "Cities") { show = false; }
+        if (d.state && selectedStates.indexOf(d.state.toLowerCase()) === -1) { show = false; }
+        if (show) {
+          if (!map.hasLayer(marker)) { marker.addTo(map); }
+        } else {
+          if (map.hasLayer(marker)) { map.removeLayer(marker); }
+        }
+      });
+      
+      // Update City markers (CSV3)
+      cityMarkers.forEach(function(marker) {
+        var d = marker.myData;
+        var show = true;
+        if (mapMode === "Biblical" || mapMode === "USBiblical") { show = false; }
+        if (d.country === "US" && d.state && selectedStates.indexOf(d.state.toLowerCase()) === -1) {
+          show = false;
+        }
+        if (d.country !== "US" && !toggleUK) { show = false; }
+        if (show) {
+          if (!map.hasLayer(marker)) { marker.addTo(map); }
+        } else {
+          if (map.hasLayer(marker)) { map.removeLayer(marker); }
+        }
+      });
+    }
+    
+    /*****************************************************
+     * Build Filter Panel (US State Checkboxes)
+     *****************************************************/
+    function buildFilterPanel() {
+      var container = document.getElementById("us-states-filter");
+      container.innerHTML = "";
+      var states = Array.from(usStatesSet).sort();
+      console.log("Building filter panel with states:", states);
+      states.forEach(function(state) {
+        var checkboxId = "state-" + state.replace(/\s+/g, "_");
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = checkboxId;
+        checkbox.value = state;
+        checkbox.checked = true;
+        checkbox.onchange = updateMarkersVisibility;
+        container.appendChild(checkbox);
+        var label = document.createElement("label");
+        label.htmlFor = checkboxId;
+        label.innerText = " " + state;
+        container.appendChild(label);
+        var onlyBtn = document.createElement("button");
+        onlyBtn.type = "button";
+        onlyBtn.className = "btn btn-sm btn-link ms-1";
+        onlyBtn.innerText = "Only";
+        onlyBtn.onclick = function() {
+          var inputs = container.querySelectorAll("input[type=checkbox]");
+          inputs.forEach(function(inp) { inp.checked = false; });
+          checkbox.checked = true;
+          updateMarkersVisibility();
+        };
+        container.appendChild(onlyBtn);
+        container.appendChild(document.createElement("br"));
+      });
+      document.getElementById("toggleUK").onchange = updateMarkersVisibility;
+      document.getElementById("toggleBiblicalAdvanced").onchange = function() {
+        advancedBiblical = this.checked;
+        updateMarkersVisibility();
+      };
+      document.getElementById("mapMode").onchange = updateMarkersVisibility;
+      document.getElementById("selectAllStates").onclick = function() {
+        var inputs = container.querySelectorAll("input[type=checkbox]");
+        inputs.forEach(function(inp) { inp.checked = true; });
+        updateMarkersVisibility();
+      };
+    }
+    
+    /*****************************************************
+     * Search Functionality
+     *****************************************************/
+    function setupCitySearch() {
+      var searchInput = document.getElementById("citySearch");
+      var resultsList = document.getElementById("searchResults");
+      
+      searchInput.addEventListener("input", function() {
+        var query = this.value.toLowerCase().trim();
+        resultsList.innerHTML = "";
+        if (!query) { resultsList.style.display = "none"; return; }
+        var matches = new Set();
+        // Collect groupKeys from CSV2 and CSV3 markers.
+        usBiblicalMarkers.forEach(function(m) {
+          if (m.myData.groupKey.indexOf(query) !== -1) { matches.add(m.myData.groupKey); }
+        });
+        cityMarkers.forEach(function(m) {
+          if (m.myData.groupKey.indexOf(query) !== -1) { matches.add(m.myData.groupKey); }
+        });
+        matches = Array.from(matches);
+        if (matches.length > 0) {
+          matches.slice(0, 20).forEach(function(match) {
+            var li = document.createElement("li");
+            li.innerText = match;
+            li.onclick = function() {
+              // Find a marker from CSV2 first, then CSV3, with that groupKey.
+              var marker = usBiblicalMarkers.find(function(m) { return m.myData.groupKey === match; }) ||
+                           cityMarkers.find(function(m) { return m.myData.groupKey === match; });
+              if (marker) {
+                map.flyTo(marker.getLatLng(), 10, { duration: 1.5 });
+                marker.openPopup();
+              }
+              resultsList.style.display = "none";
+              searchInput.value = "";
+            };
+            resultsList.appendChild(li);
+          });
+          resultsList.style.display = "block";
+        } else {
+          resultsList.style.display = "none";
+        }
+      });
+    }
+    
+    /*****************************************************
+     * Zoom to All Markers Button
+     *****************************************************/
+    function zoomToAllMarkers() {
+      var bounds = L.latLngBounds([]);
+      usBiblicalMarkers.forEach(function(marker) {
+        if (map.hasLayer(marker)) { bounds.extend(marker.getLatLng()); }
+      });
+      cityMarkers.forEach(function(marker) {
+        if (map.hasLayer(marker)) { bounds.extend(marker.getLatLng()); }
+      });
+      if (bounds.isValid()) {
+        map.fitBounds(bounds);
+      } else {
+        console.log("No markers in bounds to zoom to.");
+      }
+    }
+    document.getElementById("zoomAllBtn").onclick = zoomToAllMarkers;
+    
+    /*****************************************************
+     * (Initial update is triggered after all CSVs are loaded)
+     *****************************************************/
   </script>
 </body>
 </html>
