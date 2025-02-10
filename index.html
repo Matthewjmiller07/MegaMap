@@ -53,12 +53,21 @@
     #searchResults li:hover, #searchResults_mobile li:hover {
       background-color: #f0f0f0;
     }
-    /* Mobile: adjust the offcanvas panel width */
+    /* Make popup content scrollable when long */
+    .leaflet-popup-content {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    /* Mobile offcanvas filter panel adjustments */
     @media (max-width: 768px) {
       .offcanvas {
         width: 80% !important;
       }
-      /* Mobile popup adjustments: reduce max width and font size, hide the tip */
+      .offcanvas-body {
+        max-height: calc(100vh - 60px);
+        overflow-y: auto;
+      }
+      /* Reduce popup max width and font size on mobile; hide the tip */
       .leaflet-popup-content-wrapper {
         max-width: 90% !important;
         font-size: 0.85rem;
@@ -216,6 +225,14 @@
       maxZoom: 18
     }).addTo(map);
     
+    // Define popup options with a maximum width, extra autoPan padding, and an offset so that long popups scroll
+    const popupOptions = {
+      maxWidth: 250,
+      autoPan: true,
+      autoPanPadding: L.point(10, 100),
+      offset: L.point(0, -10)
+    };
+    
     /*****************************************************
      * FILTER SETTINGS HELPER
      *****************************************************/
@@ -226,7 +243,6 @@
       let usBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
       let toggleUSUK = (usUkDesktop ? usUkDesktop.checked : false) || (usUkMobile ? usUkMobile.checked : false);
       let toggleUSBiblical = (usBiblicalDesktop ? usBiblicalDesktop.checked : false) || (usBiblicalMobile ? usBiblicalMobile.checked : false);
-      
       let stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox], #us-states-filter-mobile input[type=checkbox]");
       let selectedStates = [];
       stateInputs.forEach(cb => {
@@ -366,7 +382,7 @@
     }
     
     /*****************************************************
-     * POPUP BUILDERS
+     * POPUP BUILDERS (with popupOptions applied)
      *****************************************************/
     function showCityPopup(marker) {
       let d = marker.myData;
@@ -391,7 +407,7 @@
         });
       }
       console.log("City popup for groupKey:", d.groupKey, "content:", content);
-      marker.bindPopup(content).openPopup();
+      marker.bindPopup(content, popupOptions).openPopup();
       setTimeout(() => {
         if (typeof sefaria !== "undefined" && sefaria.link) {
           sefaria.link({ dynamic: true });
@@ -422,7 +438,7 @@
       }
       content += "<br><button class='btn btn-sm btn-success' onclick='flyToBiblicalPlace(\"" + d.groupKey + "\")'>Fly to Biblical Place</button>";
       console.log("Biblical popup for groupKey:", d.groupKey, "content:", content);
-      marker.bindPopup(content).openPopup();
+      marker.bindPopup(content, popupOptions).openPopup();
       setTimeout(() => {
         if (typeof sefaria !== "undefined" && sefaria.link) {
           sefaria.link({ dynamic: true });
@@ -541,7 +557,7 @@
     }
     
     function buildFilterPanel() {
-      // Desktop filter panel
+      // Build desktop filter panel.
       let container = document.getElementById("us-states-filter");
       container.innerHTML = "";
       let states = Array.from(usStatesSet).sort();
@@ -577,8 +593,7 @@
         inputs.forEach(inp => { inp.checked = true; });
         updateMarkersVisibility();
       };
-      
-      // Mobile filter panel: clone the desktop panel
+      // Build mobile filter panel by cloning the desktop version.
       let mobileContainer = document.getElementById("us-states-filter-mobile");
       if (mobileContainer) {
         mobileContainer.innerHTML = container.innerHTML;
@@ -707,9 +722,10 @@
     setupCitySearch();
   </script>
   
-  <!-- Sefaria Linker Script (uses POST internally) -->
+  <!-- Sefaria Linker Script (using POST internally) -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
+    // Initialize the Sefaria Linker in popup-click mode with dynamic content.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
