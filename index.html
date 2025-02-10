@@ -53,21 +53,18 @@
     #searchResults li:hover, #searchResults_mobile li:hover {
       background-color: #f0f0f0;
     }
-    /* Make popup content scrollable when long */
+    /* Limit popup size so long popups don’t cover the clicked marker */
     .leaflet-popup-content {
       max-height: 300px;
       overflow-y: auto;
     }
-    /* Mobile offcanvas filter panel adjustments */
+    /* Mobile adjustments */
     @media (max-width: 768px) {
-      .offcanvas {
-        width: 80% !important;
-      }
+      .offcanvas { width: 80% !important; }
       .offcanvas-body {
         max-height: calc(100vh - 60px);
         overflow-y: auto;
       }
-      /* Reduce popup max width and font size on mobile; hide the tip */
       .leaflet-popup-content-wrapper {
         max-width: 90% !important;
         font-size: 0.85rem;
@@ -225,7 +222,7 @@
       maxZoom: 18
     }).addTo(map);
     
-    // Define popup options with a maximum width, extra autoPan padding, and an offset so that long popups scroll
+    // Popup options to keep popups from overrunning the marker
     const popupOptions = {
       maxWidth: 250,
       autoPan: true,
@@ -234,21 +231,77 @@
     };
     
     /*****************************************************
+     * URL FILTER FUNCTIONS
+     *****************************************************/
+    function getInitialFiltersFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        usuk: params.get("usuk") === "1",
+        usbiblical: params.get("usbiblical") === "1",
+        states: params.get("states")
+          ? params.get("states").split(",").map(s => s.trim().toLowerCase())
+          : null
+      };
+    }
+    
+    // Only update URL when the user makes a manual change.
+    function updateUrlWithFilters() {
+      const filters = getFilterSettings();
+      const params = new URLSearchParams(window.location.search);
+      params.set("usuk", filters.toggleUSUK ? "1" : "0");
+      params.set("usbiblical", filters.toggleUSBiblical ? "1" : "0");
+      if (filters.selectedStates.length > 0) {
+        params.set("states", filters.selectedStates.join(","));
+      } else {
+        params.delete("states");
+      }
+      history.replaceState(null, "", "?" + params.toString());
+    }
+    
+    /*****************************************************
+     * APPLY FILTERS FROM URL
+     *****************************************************/
+    function applyFiltersFromUrl() {
+      const initialFilters = getInitialFiltersFromUrl();
+      console.log("Applying filters from URL:", initialFilters);
+      // Update desktop toggles.
+      const toggleUSUKDesktop = document.getElementById("toggleUSUK");
+      const toggleUSBiblicalDesktop = document.getElementById("toggleUSBiblical");
+      if (toggleUSUKDesktop) toggleUSUKDesktop.checked = initialFilters.usuk;
+      if (toggleUSBiblicalDesktop) toggleUSBiblicalDesktop.checked = initialFilters.usbiblical;
+      // Update mobile toggles.
+      const toggleUSUKMobile = document.getElementById("toggleUSUK_mobile");
+      const toggleUSBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
+      if (toggleUSUKMobile) toggleUSUKMobile.checked = initialFilters.usuk;
+      if (toggleUSBiblicalMobile) toggleUSBiblicalMobile.checked = initialFilters.usbiblical;
+      // Update state checkboxes if a states parameter exists.
+      if (initialFilters.states) {
+        const stateCheckboxesDesktop = document.querySelectorAll("#us-states-filter input[type=checkbox]");
+        stateCheckboxesDesktop.forEach(cb => {
+          cb.checked = initialFilters.states.includes(cb.value.toLowerCase());
+        });
+        const stateCheckboxesMobile = document.querySelectorAll("#us-states-filter-mobile input[type=checkbox]");
+        stateCheckboxesMobile.forEach(cb => {
+          cb.checked = initialFilters.states.includes(cb.value.toLowerCase());
+        });
+      }
+      updateMarkersVisibility();
+    }
+    
+    /*****************************************************
      * FILTER SETTINGS HELPER
      *****************************************************/
     function getFilterSettings() {
-      let usUkDesktop = document.getElementById("toggleUSUK");
-      let usUkMobile = document.getElementById("toggleUSUK_mobile");
-      let usBiblicalDesktop = document.getElementById("toggleUSBiblical");
-      let usBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
-      let toggleUSUK = (usUkDesktop ? usUkDesktop.checked : false) || (usUkMobile ? usUkMobile.checked : false);
-      let toggleUSBiblical = (usBiblicalDesktop ? usBiblicalDesktop.checked : false) || (usBiblicalMobile ? usBiblicalMobile.checked : false);
-      let stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox], #us-states-filter-mobile input[type=checkbox]");
+      const usUkDesktop = document.getElementById("toggleUSUK");
+      const usUkMobile = document.getElementById("toggleUSUK_mobile");
+      const usBiblicalDesktop = document.getElementById("toggleUSBiblical");
+      const usBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
+      const toggleUSUK = (usUkDesktop ? usUkDesktop.checked : false) || (usUkMobile ? usUkMobile.checked : false);
+      const toggleUSBiblical = (usBiblicalDesktop ? usBiblicalDesktop.checked : false) || (usBiblicalMobile ? usBiblicalMobile.checked : false);
+      const stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox], #us-states-filter-mobile input[type=checkbox]");
       let selectedStates = [];
       stateInputs.forEach(cb => {
-        if (cb.checked) {
-          selectedStates.push(cb.value.trim().toLowerCase());
-        }
+        if (cb.checked) { selectedStates.push(cb.value.trim().toLowerCase()); }
       });
       return { toggleUSUK, toggleUSBiblical, selectedStates };
     }
@@ -272,7 +325,7 @@
             let groupKey = getBaseGroup(cityName);
             let country = (row["Country"] || "").toUpperCase();
             let state = row["State"] ? titleCase(row["State"].trim()) : "";
-            if (country === "US" && state && state !== "N/A") { 
+            if (country === "US" && state && state !== "N/A") {
               usStatesSet.add(state.toLowerCase());
             }
             let lat = parseFloat(row["latitude"]);
@@ -382,7 +435,7 @@
     }
     
     /*****************************************************
-     * POPUP BUILDERS (with popupOptions applied)
+     * POPUP BUILDERS
      *****************************************************/
     function showCityPopup(marker) {
       let d = marker.myData;
@@ -521,14 +574,10 @@
      * FILTERING & STATE PANEL
      *****************************************************/
     function updateMarkersVisibility() {
-      let filters = getFilterSettings();
+      const filters = getFilterSettings();
       
-      if (filters.toggleUSUK && !usUkLoaded) {
-        loadUsUkCities();
-      }
-      if (filters.toggleUSBiblical && !usBiblicalLoaded) {
-        loadUsBiblicalCities();
-      }
+      if (filters.toggleUSUK && !usUkLoaded) { loadUsUkCities(); }
+      if (filters.toggleUSBiblical && !usBiblicalLoaded) { loadUsBiblicalCities(); }
       
       if (!filters.toggleUSUK) {
         usUkMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
@@ -554,9 +603,12 @@
           if (map.hasLayer(m)) map.removeLayer(m);
         }
       });
+      
+      // (Do not call updateUrlWithFilters() here so that the URL is updated only on user change.)
     }
     
     function buildFilterPanel() {
+      const initialFilters = getInitialFiltersFromUrl();
       // Build desktop filter panel.
       let container = document.getElementById("us-states-filter");
       container.innerHTML = "";
@@ -568,8 +620,10 @@
         checkbox.type = "checkbox";
         checkbox.id = checkboxId;
         checkbox.value = state;
-        checkbox.checked = true;
-        checkbox.onchange = updateMarkersVisibility;
+        // If URL filter exists, only check those states; otherwise default to checked.
+        checkbox.checked = initialFilters.states ? initialFilters.states.includes(state.toLowerCase()) : true;
+        checkbox.addEventListener("change", updateUrlWithFilters);
+        checkbox.addEventListener("change", updateMarkersVisibility);
         container.appendChild(checkbox);
         let label = document.createElement("label");
         label.htmlFor = checkboxId;
@@ -579,35 +633,41 @@
         onlyBtn.type = "button";
         onlyBtn.className = "btn btn-sm btn-link ms-1";
         onlyBtn.innerText = "Only";
-        onlyBtn.onclick = function() {
+        onlyBtn.addEventListener("click", function() {
           let inputs = container.querySelectorAll("input[type=checkbox]");
           inputs.forEach(inp => { inp.checked = false; });
           checkbox.checked = true;
+          updateUrlWithFilters();
           updateMarkersVisibility();
-        };
+        });
         container.appendChild(onlyBtn);
         container.appendChild(document.createElement("br"));
       });
-      document.getElementById("selectAllStates").onclick = function() {
+      document.getElementById("selectAllStates").addEventListener("click", function() {
         let inputs = container.querySelectorAll("input[type=checkbox]");
         inputs.forEach(inp => { inp.checked = true; });
+        updateUrlWithFilters();
         updateMarkersVisibility();
-      };
+      });
+      
       // Build mobile filter panel by cloning the desktop version.
       let mobileContainer = document.getElementById("us-states-filter-mobile");
       if (mobileContainer) {
         mobileContainer.innerHTML = container.innerHTML;
         mobileContainer.querySelectorAll("input[type=checkbox]").forEach(checkbox => {
-          checkbox.onchange = updateMarkersVisibility;
+          checkbox.addEventListener("change", updateUrlWithFilters);
+          checkbox.addEventListener("change", updateMarkersVisibility);
         });
-        document.getElementById("selectAllStates_mobile").onclick = function() {
+        document.getElementById("selectAllStates_mobile").addEventListener("click", function() {
           mobileContainer.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = true; });
+          updateUrlWithFilters();
           updateMarkersVisibility();
-        };
+        });
       }
     }
     
     function setupCitySearch() {
+      // Desktop search.
       let searchInput = document.getElementById("citySearch");
       let resultsList = document.getElementById("searchResults");
       searchInput.addEventListener("input", function() {
@@ -648,6 +708,7 @@
         }
       });
       
+      // Mobile search.
       let searchInputMobile = document.getElementById("citySearch_mobile");
       let resultsListMobile = document.getElementById("searchResults_mobile");
       if (searchInputMobile) {
@@ -698,21 +759,21 @@
       if (bounds.isValid()) { map.fitBounds(bounds); }
       else { console.log("No markers in bounds to zoom to."); }
     }
-    document.getElementById("zoomAllBtn").onclick = zoomToAllMarkers;
+    document.getElementById("zoomAllBtn").addEventListener("click", zoomToAllMarkers);
     if (document.getElementById("zoomAllBtn_mobile")) {
-      document.getElementById("zoomAllBtn_mobile").onclick = zoomToAllMarkers;
+      document.getElementById("zoomAllBtn_mobile").addEventListener("click", zoomToAllMarkers);
     }
     
     /*****************************************************
      * EVENT LISTENERS FOR TOGGLES
      *****************************************************/
-    document.getElementById("toggleUSUK").addEventListener("change", updateMarkersVisibility);
-    document.getElementById("toggleUSBiblical").addEventListener("change", updateMarkersVisibility);
-    if(document.getElementById("toggleUSUK_mobile")){
-      document.getElementById("toggleUSUK_mobile").addEventListener("change", updateMarkersVisibility);
+    document.getElementById("toggleUSUK").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
+    document.getElementById("toggleUSBiblical").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
+    if (document.getElementById("toggleUSUK_mobile")) {
+      document.getElementById("toggleUSUK_mobile").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     }
-    if(document.getElementById("toggleUSBiblical_mobile")){
-      document.getElementById("toggleUSBiblical_mobile").addEventListener("change", updateMarkersVisibility);
+    if (document.getElementById("toggleUSBiblical_mobile")) {
+      document.getElementById("toggleUSBiblical_mobile").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     }
     
     /*****************************************************
@@ -720,12 +781,18 @@
      *****************************************************/
     buildFilterPanel();
     setupCitySearch();
+    // On page load, apply URL filter settings.
+    document.addEventListener("DOMContentLoaded", applyFiltersFromUrl);
+    
+    /*****************************************************
+     * Sefaria Linker Initialization
+     *****************************************************/
+    // The Sefaria Linker uses a POST API internally, so no changes are needed here.
   </script>
   
-  <!-- Sefaria Linker Script (using POST internally) -->
+  <!-- Sefaria Linker Script -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
-    // Initialize the Sefaria Linker in popup-click mode with dynamic content.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
