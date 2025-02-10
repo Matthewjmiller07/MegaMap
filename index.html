@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Responsive meta tag with shrink-to-fit -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
   <title>Combined Biblical & US/UK Cities Map</title>
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css" />
@@ -11,10 +12,17 @@
   <!-- Leaflet Awesome Markers CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css" />
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; }
-    #map { width: 100%; height: 100%; }
-    /* Filter panel styling */
-    #filter-panel {
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+    /* Desktop fixed filter panel */
+    #filter-panel-fixed {
       position: absolute;
       top: 10px;
       left: 10px;
@@ -28,7 +36,7 @@
       width: 280px;
     }
     /* Search results styling */
-    #searchResults {
+    #searchResults, #searchResults_mobile {
       max-height: 150px;
       overflow-y: auto;
       border: 1px solid #ddd;
@@ -37,43 +45,96 @@
       margin-top: 5px;
       padding-left: 0;
     }
-    #searchResults li { list-style: none; padding: 5px; cursor: pointer; }
-    #searchResults li:hover { background-color: #f0f0f0; }
+    #searchResults li, #searchResults_mobile li {
+      list-style: none;
+      padding: 5px;
+      cursor: pointer;
+    }
+    #searchResults li:hover, #searchResults_mobile li:hover {
+      background-color: #f0f0f0;
+    }
+    /* Mobile: adjust the offcanvas panel width */
+    @media (max-width: 768px) {
+      .offcanvas {
+        width: 80% !important;
+      }
+      /* Mobile popup adjustments: reduce max width and font size, hide the tip */
+      .leaflet-popup-content-wrapper {
+        max-width: 90% !important;
+        font-size: 0.85rem;
+      }
+      .leaflet-popup-tip {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
   <!-- Map container -->
   <div id="map"></div>
   
-  <!-- Filter Panel – by default no markers are loaded -->
-  <div id="filter-panel">
+  <!-- Desktop fixed filter panel (visible on large screens) -->
+  <div id="filter-panel-fixed" class="d-none d-lg-block shadow">
     <h5>Filter Markers</h5>
-    <!-- Two toggles for lazy loading marker sets -->
-    <div class="mb-2">
-      <input type="checkbox" id="toggleUSUK">
-      <label for="toggleUSUK">Show US‑UK Cities</label>
+    <div class="mb-2 form-check">
+      <input type="checkbox" id="toggleUSUK" class="form-check-input">
+      <label for="toggleUSUK" class="form-check-label">Show US‑UK Cities</label>
     </div>
-    <div class="mb-2">
-      <input type="checkbox" id="toggleUSBiblical">
-      <label for="toggleUSBiblical">Show US Biblical Cities</label>
+    <div class="mb-2 form-check">
+      <input type="checkbox" id="toggleUSBiblical" class="form-check-input">
+      <label for="toggleUSBiblical" class="form-check-label">Show US Biblical Cities</label>
     </div>
-    <!-- State filter panel -->
     <div class="mb-2">
       <strong>US States:</strong>
       <div id="us-states-filter"></div>
       <button id="selectAllStates" class="btn btn-sm btn-primary mt-2">Select All States</button>
     </div>
-    <!-- Zoom All Button -->
     <div class="mt-2">
       <button id="zoomAllBtn" class="btn btn-sm btn-warning">Zoom to All Markers</button>
     </div>
-    <!-- Search Box -->
     <div class="mt-3">
       <label for="citySearch" class="form-label">Search (by group):</label>
       <input type="text" id="citySearch" class="form-control form-control-sm" placeholder="Type to search...">
       <ul id="searchResults"></ul>
     </div>
   </div>
+  
+  <!-- Mobile offcanvas filter panel (visible on small screens) -->
+  <div class="offcanvas offcanvas-start d-lg-none" tabindex="-1" id="filterPanelOffcanvas" aria-labelledby="filterPanelOffcanvasLabel">
+    <div class="offcanvas-header">
+      <h5 class="offcanvas-title" id="filterPanelOffcanvasLabel">Filter Markers</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+      <!-- Mobile controls mirror the desktop ones -->
+      <div class="mb-2 form-check">
+        <input type="checkbox" id="toggleUSUK_mobile" class="form-check-input">
+        <label for="toggleUSUK_mobile" class="form-check-label">Show US‑UK Cities</label>
+      </div>
+      <div class="mb-2 form-check">
+        <input type="checkbox" id="toggleUSBiblical_mobile" class="form-check-input">
+        <label for="toggleUSBiblical_mobile" class="form-check-label">Show US Biblical Cities</label>
+      </div>
+      <div class="mb-2">
+        <strong>US States:</strong>
+        <div id="us-states-filter-mobile"></div>
+        <button id="selectAllStates_mobile" class="btn btn-sm btn-primary mt-2">Select All States</button>
+      </div>
+      <div class="mt-2">
+        <button id="zoomAllBtn_mobile" class="btn btn-sm btn-warning">Zoom to All Markers</button>
+      </div>
+      <div class="mt-3">
+        <label for="citySearch_mobile" class="form-label">Search (by group):</label>
+        <input type="text" id="citySearch_mobile" class="form-control form-control-sm" placeholder="Type to search...">
+        <ul id="searchResults_mobile"></ul>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Mobile filter toggle button -->
+  <button class="btn btn-primary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterPanelOffcanvas" aria-controls="filterPanelOffcanvas" style="position: absolute; top: 10px; right: 10px; z-index: 1200;">
+    Filters
+  </button>
   
   <!-- Scripts -->
   <!-- jQuery -->
@@ -91,12 +152,10 @@
     /***********************
      * UTILITY FUNCTIONS
      ***********************/
-    // Returns the part before "/" with trailing digits removed.
     function cleanPlaceName(name) {
       let cleaned = name.split("/")[0].trim();
       return cleaned.replace(/\s*\d+$/, "");
     }
-    // Returns a grouping key in lower-case by removing trailing digits, any parentheticals, and the word "beach".
     function getBaseGroup(name) {
       if (!name) return "";
       let cleaned = name.split("/")[0].trim().toLowerCase();
@@ -105,14 +164,11 @@
       cleaned = cleaned.replace(/\bbeach\b/g, "").trim();
       return cleaned;
     }
-    // Converts a string to title case.
     function titleCase(str) {
       return str.replace(/\w\S*/g, function(txt) {
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
       });
     }
-    // Splits a coordinate string into an array of [lat, lon] pairs.
-    // For processed_biblical_places.csv, coordinates are stored as long,lat so pass swap=true.
     function parseCoordinates(coordStr, swap = false) {
       coordStr = coordStr.trim();
       if (!coordStr) return [];
@@ -134,20 +190,13 @@
     /***********************
      * GLOBAL VARIABLES
      ***********************/
-    // Marker arrays (lazy loaded)
-    let usUkMarkers = [];      // from cities_with_both_coords.csv
-    let usBiblicalMarkers = []; // from processed_biblical_places.csv
+    let usUkMarkers = [];
+    let usBiblicalMarkers = [];
     let usUkLoaded = false;
     let usBiblicalLoaded = false;
-    
-    // biblicalDataMap: keyed by groupKey, stores { lat, lng, polygon, biblicalReferences } from processed_biblical_places.csv.
     let biblicalDataMap = {};
-    
-    // For filtering: a set of US state names.
     let usStatesSet = new Set();
-    
-    // Settings
-    let advancedBiblical = false; // Set to true to show all biblical entries regardless of confidence.
+    let advancedBiblical = false;
     
     /***********************
      * ICON DEFINITIONS
@@ -155,7 +204,6 @@
     let iconCityUS = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'blue', prefix: 'glyphicon' });
     let iconCityUK = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'red', prefix: 'glyphicon' });
     let iconUSBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'purple', prefix: 'glyphicon' });
-    // iconBiblical is used when flying to the biblical place.
     let iconBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'green', prefix: 'glyphicon' });
     let highlightIcon = L.AwesomeMarkers.icon({ icon: 'star', markerColor: 'orange', prefix: 'glyphicon' });
     
@@ -169,9 +217,29 @@
     }).addTo(map);
     
     /*****************************************************
+     * FILTER SETTINGS HELPER
+     *****************************************************/
+    function getFilterSettings() {
+      let usUkDesktop = document.getElementById("toggleUSUK");
+      let usUkMobile = document.getElementById("toggleUSUK_mobile");
+      let usBiblicalDesktop = document.getElementById("toggleUSBiblical");
+      let usBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
+      let toggleUSUK = (usUkDesktop ? usUkDesktop.checked : false) || (usUkMobile ? usUkMobile.checked : false);
+      let toggleUSBiblical = (usBiblicalDesktop ? usBiblicalDesktop.checked : false) || (usBiblicalMobile ? usBiblicalMobile.checked : false);
+      
+      let stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox], #us-states-filter-mobile input[type=checkbox]");
+      let selectedStates = [];
+      stateInputs.forEach(cb => {
+        if (cb.checked) {
+          selectedStates.push(cb.value.trim().toLowerCase());
+        }
+      });
+      return { toggleUSUK, toggleUSBiblical, selectedStates };
+    }
+    
+    /*****************************************************
      * LAZY CSV LOADING FUNCTIONS
      *****************************************************/
-    // Load US–UK Cities from cities_with_both_coords.csv.
     function loadUsUkCities() {
       if (usUkLoaded) return;
       console.log("Loading US–UK Cities...");
@@ -219,7 +287,6 @@
       });
     }
     
-    // Load US Biblical Cities from processed_biblical_places.csv.
     function loadUsBiblicalCities() {
       if (usBiblicalLoaded) return;
       console.log("Loading US Biblical Cities...");
@@ -233,10 +300,9 @@
             if (!placeName) return;
             let displayLabel = titleCase(placeName);
             let groupKey = getBaseGroup(placeName);
-            // Save biblical place data for fly‑to (only once per group)
             if (!biblicalDataMap[groupKey]) {
               let coordsStr = row["Coordinates"] ? row["Coordinates"].trim() : "";
-              let parsedCoords = parseCoordinates(coordsStr, true); // Swap because coordinates are stored as long,lat
+              let parsedCoords = parseCoordinates(coordsStr, true);
               if (parsedCoords.length > 0) {
                 let point = (parsedCoords.length >= 3)
                   ? (function() {
@@ -254,11 +320,9 @@
                 console.log("Stored biblical data for group:", groupKey, biblicalDataMap[groupKey]);
               }
             }
-            // Process the "US Matching Cities" column.
             let usMatchesRaw = row["US Matching Cities"] ? row["US Matching Cities"].trim() : "";
             let usMatches = usMatchesRaw.split(";").map(s => s.trim()).filter(s => s !== "");
             usMatches.forEach(function(matchStr) {
-              // Expected format: "City (State) - placeType: lat,lon"
               let parts = matchStr.split(":");
               if (parts.length < 2) return;
               let matchLabel = parts[0].trim();
@@ -304,22 +368,18 @@
     /*****************************************************
      * POPUP BUILDERS
      *****************************************************/
-    // Popup for US/UK City markers.
     function showCityPopup(marker) {
       let d = marker.myData;
-      // For US rows, display the state only if valid.
       let stateDisplay = (d.country === "US" && d.state && d.state.toUpperCase() !== "N/A") ? d.state : "";
       let content = "<strong>" + d.displayLabel + "</strong><br>";
       if (stateDisplay) { content += "State: " + stateDisplay + "<br>"; }
       content += "Country: " + d.country + "<br>";
-      // Fuzzy search among US/UK markers for matching groupKey.
       let similar = usUkMarkers.filter(m => m.myData.groupKey.indexOf(d.groupKey) !== -1);
       if (similar.length > 0) {
         content += "<u>Matching Cities:</u><br>";
         let seen = {};
         similar.forEach(m => {
           let dd = m.myData;
-          // For US rows, skip if state is missing.
           if (dd.country === "US" && (!dd.state || dd.state.toUpperCase() === "N/A")) return;
           let key = dd.displayLabel + " (" + dd.country + ")";
           if (!seen[key]) {
@@ -332,7 +392,6 @@
       }
       console.log("City popup for groupKey:", d.groupKey, "content:", content);
       marker.bindPopup(content).openPopup();
-      // Re-run the Sefaria Linker on the popup content.
       setTimeout(() => {
         if (typeof sefaria !== "undefined" && sefaria.link) {
           sefaria.link({ dynamic: true });
@@ -341,15 +400,12 @@
       }, 100);
     }
     
-    // Popup for US Biblical markers.
     function showBiblicalPopup(marker) {
       let d = marker.myData;
       let content = "<strong>" + d.label + "</strong><br>";
-      // Display biblical references if available.
       if (d.biblicalReferences) {
         content += "Biblical References: " + d.biblicalReferences + "<br>";
       }
-      // List matching US Biblical markers (only those with a valid state)
       let similar = usBiblicalMarkers.filter(m => m.myData.groupKey === d.groupKey && m.myData.state && m.myData.state.toUpperCase() !== "N/A");
       if (similar.length > 0) {
         content += "<u>US Matching Cities:</u><br>";
@@ -364,12 +420,9 @@
           }
         });
       }
-      // In the biblical popup, do not show a "Fly to US Biblical" button if already at the biblical place.
-      // Instead, include a button to fly to the biblical place.
       content += "<br><button class='btn btn-sm btn-success' onclick='flyToBiblicalPlace(\"" + d.groupKey + "\")'>Fly to Biblical Place</button>";
       console.log("Biblical popup for groupKey:", d.groupKey, "content:", content);
       marker.bindPopup(content).openPopup();
-      // Re-run Sefaria Linker on the popup content.
       setTimeout(() => {
         if (typeof sefaria !== "undefined" && sefaria.link) {
           sefaria.link({ dynamic: true });
@@ -378,7 +431,6 @@
       }, 100);
     }
     
-    // When clicking “Back to US Cities” in a biblical popup.
     function flyToCityView(groupKey) {
       let marker = usUkMarkers.find(m => m.myData.groupKey === groupKey);
       if (marker) {
@@ -389,16 +441,12 @@
       }
     }
     
-    // Fly-to functionality for markers.
-    // For city markers, type is "City-US" or "City-UK"; for biblical markers, use "US Biblical".
     function flyToLocation(lat, lng, name, type) {
       let groupKey = getBaseGroup(name);
       let foundMarker = null;
       if (type.startsWith("City-")) {
         let desiredCountry = type.split("-")[1];
-        // Try exact match first.
         foundMarker = usUkMarkers.find(m => m.myData.groupKey === groupKey && m.myData.country === desiredCountry);
-        // If not found, do a fuzzy search.
         if (!foundMarker) {
           foundMarker = usUkMarkers.find(m => m.myData.groupKey.indexOf(groupKey) !== -1);
         }
@@ -406,11 +454,10 @@
         foundMarker = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey);
       }
       if (foundMarker) {
-        // If the marker is filtered out, re‑add it and mark it as frozen.
         if (!map.hasLayer(foundMarker)) { 
           map.addLayer(foundMarker); 
           foundMarker.myData.frozen = true;
-          console.log("Re‑adding filtered marker for fly‑to:", foundMarker.myData.label);
+          console.log("Re-adding filtered marker for fly-to:", foundMarker.myData.label);
         }
         let orig = foundMarker.options.icon;
         foundMarker.setIcon(highlightIcon);
@@ -418,7 +465,6 @@
         map.flyTo(foundMarker.getLatLng(), 10, { duration: 1.5 });
         foundMarker.openPopup();
       } else {
-        // Create a temporary marker if none is found.
         let tempIcon = (type.startsWith("City-"))
           ? ((type.split("-")[1] === "UK") ? iconCityUK : iconCityUS)
           : (type === "US Biblical" ? iconUSBiblical : iconBiblical);
@@ -431,11 +477,9 @@
     }
     window.flyToLocation = flyToLocation;
     
-    // Fly-to a biblical place using biblicalDataMap.
     function flyToBiblicalPlace(groupKey) {
       let bib = biblicalDataMap[groupKey];
       if (bib) {
-        // Try to find an existing biblical marker (type "Biblical") for this group.
         let existing = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey && m.myData.type === "Biblical");
         if (!existing) {
           let marker = L.marker([bib.lat, bib.lng], { icon: iconBiblical }).addTo(map);
@@ -461,47 +505,47 @@
      * FILTERING & STATE PANEL
      *****************************************************/
     function updateMarkersVisibility() {
-      // Lazy load markers if toggles are checked.
-      if (document.getElementById("toggleUSUK").checked && !usUkLoaded) {
+      let filters = getFilterSettings();
+      
+      if (filters.toggleUSUK && !usUkLoaded) {
         loadUsUkCities();
       }
-      if (document.getElementById("toggleUSBiblical").checked && !usBiblicalLoaded) {
+      if (filters.toggleUSBiblical && !usBiblicalLoaded) {
         loadUsBiblicalCities();
       }
-      // Remove markers if toggles are unchecked.
-      if (!document.getElementById("toggleUSUK").checked) {
+      
+      if (!filters.toggleUSUK) {
         usUkMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
       } else {
         usUkMarkers.forEach(m => { if (!map.hasLayer(m)) map.addLayer(m); });
       }
-      if (!document.getElementById("toggleUSBiblical").checked) {
+      
+      if (!filters.toggleUSBiblical) {
         usBiblicalMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
       } else {
         usBiblicalMarkers.forEach(m => { if (!map.hasLayer(m)) map.addLayer(m); });
       }
-      // Filter markers by US state – do not remove markers marked as frozen.
-      let stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox]");
-      let selectedStates = [];
-      stateInputs.forEach(cb => { if (cb.checked) selectedStates.push(cb.value.trim().toLowerCase()); });
+      
       usUkMarkers.forEach(m => {
         let d = m.myData;
-        if (d.country === "US" && d.state && selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
+        if (d.country === "US" && d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
           if (map.hasLayer(m)) map.removeLayer(m);
         }
       });
       usBiblicalMarkers.forEach(m => {
         let d = m.myData;
-        if (d.state && selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
+        if (d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
           if (map.hasLayer(m)) map.removeLayer(m);
         }
       });
     }
     
     function buildFilterPanel() {
+      // Desktop filter panel
       let container = document.getElementById("us-states-filter");
       container.innerHTML = "";
       let states = Array.from(usStatesSet).sort();
-      console.log("Building filter panel with states:", states);
+      console.log("Building desktop filter panel with states:", states);
       states.forEach(state => {
         let checkboxId = "state-" + state.replace(/\s+/g, "_");
         let checkbox = document.createElement("input");
@@ -528,12 +572,24 @@
         container.appendChild(onlyBtn);
         container.appendChild(document.createElement("br"));
       });
-      // “Select All States” button.
       document.getElementById("selectAllStates").onclick = function() {
         let inputs = container.querySelectorAll("input[type=checkbox]");
         inputs.forEach(inp => { inp.checked = true; });
         updateMarkersVisibility();
       };
+      
+      // Mobile filter panel: clone the desktop panel
+      let mobileContainer = document.getElementById("us-states-filter-mobile");
+      if (mobileContainer) {
+        mobileContainer.innerHTML = container.innerHTML;
+        mobileContainer.querySelectorAll("input[type=checkbox]").forEach(checkbox => {
+          checkbox.onchange = updateMarkersVisibility;
+        });
+        document.getElementById("selectAllStates_mobile").onclick = function() {
+          mobileContainer.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = true; });
+          updateMarkersVisibility();
+        };
+      }
     }
     
     function setupCitySearch() {
@@ -544,7 +600,6 @@
         resultsList.innerHTML = "";
         if (!query) { resultsList.style.display = "none"; return; }
         let matches = new Set();
-        // Search among both marker sets using groupKey or part of the label.
         usUkMarkers.forEach(m => {
           if (m.myData.groupKey.indexOf(query) !== -1 || m.myData.label.toLowerCase().indexOf(query) !== -1) {
             matches.add(m.myData.groupKey);
@@ -577,6 +632,48 @@
           resultsList.style.display = "none";
         }
       });
+      
+      let searchInputMobile = document.getElementById("citySearch_mobile");
+      let resultsListMobile = document.getElementById("searchResults_mobile");
+      if (searchInputMobile) {
+        searchInputMobile.addEventListener("input", function() {
+          let query = this.value.toLowerCase().trim();
+          resultsListMobile.innerHTML = "";
+          if (!query) { resultsListMobile.style.display = "none"; return; }
+          let matches = new Set();
+          usUkMarkers.forEach(m => {
+            if (m.myData.groupKey.indexOf(query) !== -1 || m.myData.label.toLowerCase().indexOf(query) !== -1) {
+              matches.add(m.myData.groupKey);
+            }
+          });
+          usBiblicalMarkers.forEach(m => {
+            if (m.myData.groupKey.indexOf(query) !== -1 || m.myData.label.toLowerCase().indexOf(query) !== -1) {
+              matches.add(m.myData.groupKey);
+            }
+          });
+          matches = Array.from(matches);
+          if (matches.length > 0) {
+            matches.slice(0, 20).forEach(match => {
+              let li = document.createElement("li");
+              li.innerText = titleCase(match);
+              li.onclick = function() {
+                let marker = usBiblicalMarkers.find(m => m.myData.groupKey === match) ||
+                             usUkMarkers.find(m => m.myData.groupKey === match);
+                if (marker) {
+                  map.flyTo(marker.getLatLng(), 10, { duration: 1.5 });
+                  marker.openPopup();
+                }
+                resultsListMobile.style.display = "none";
+                searchInputMobile.value = "";
+              };
+              resultsListMobile.appendChild(li);
+            });
+            resultsListMobile.style.display = "block";
+          } else {
+            resultsListMobile.style.display = "none";
+          }
+        });
+      }
     }
     
     function zoomToAllMarkers() {
@@ -587,25 +684,32 @@
       else { console.log("No markers in bounds to zoom to."); }
     }
     document.getElementById("zoomAllBtn").onclick = zoomToAllMarkers;
+    if (document.getElementById("zoomAllBtn_mobile")) {
+      document.getElementById("zoomAllBtn_mobile").onclick = zoomToAllMarkers;
+    }
     
     /*****************************************************
-     * EVENT LISTENERS FOR TOGGLES (LAZY LOADING)
+     * EVENT LISTENERS FOR TOGGLES
      *****************************************************/
     document.getElementById("toggleUSUK").addEventListener("change", updateMarkersVisibility);
     document.getElementById("toggleUSBiblical").addEventListener("change", updateMarkersVisibility);
+    if(document.getElementById("toggleUSUK_mobile")){
+      document.getElementById("toggleUSUK_mobile").addEventListener("change", updateMarkersVisibility);
+    }
+    if(document.getElementById("toggleUSBiblical_mobile")){
+      document.getElementById("toggleUSBiblical_mobile").addEventListener("change", updateMarkersVisibility);
+    }
     
     /*****************************************************
      * INITIAL UI SETUP
      *****************************************************/
-    // Do not load any markers on page load.
     buildFilterPanel();
     setupCitySearch();
   </script>
   
-  <!-- Sefaria Linker Script -->
+  <!-- Sefaria Linker Script (uses POST internally) -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
-    // Initialize the Sefaria Linker on page load.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
