@@ -96,7 +96,7 @@
       let cleaned = name.split("/")[0].trim();
       return cleaned.replace(/\s*\d+$/, "");
     }
-    // Returns a grouping key (for matching) in lower-case by removing trailing digits, any parentheticals, and the word "beach".
+    // Returns a grouping key in lower-case by removing trailing digits, any parentheticals, and the word "beach".
     function getBaseGroup(name) {
       if (!name) return "";
       let cleaned = name.split("/")[0].trim().toLowerCase();
@@ -105,7 +105,7 @@
       cleaned = cleaned.replace(/\bbeach\b/g, "").trim();
       return cleaned;
     }
-    // titleCase converts a string to title case.
+    // Converts a string to title case.
     function titleCase(str) {
       return str.replace(/\w\S*/g, function(txt) {
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
@@ -134,20 +134,20 @@
     /***********************
      * GLOBAL VARIABLES
      ***********************/
-    // Marker arrays (loaded lazily)
-    let usUkMarkers = [];      // from cities_with_both_coords.csv (US/UK cities)
-    let usBiblicalMarkers = []; // from processed_biblical_places.csv (US Biblical Cities)
+    // Marker arrays (lazy loaded)
+    let usUkMarkers = [];      // from cities_with_both_coords.csv
+    let usBiblicalMarkers = []; // from processed_biblical_places.csv
     let usUkLoaded = false;
     let usBiblicalLoaded = false;
     
-    // biblicalDataMap: keyed by groupKey, stores an object { lat, lng, polygon, biblicalReferences } from processed_biblical_places.csv.
+    // biblicalDataMap: keyed by groupKey, stores { lat, lng, polygon, biblicalReferences } from processed_biblical_places.csv.
     let biblicalDataMap = {};
     
     // For filtering: a set of US state names.
     let usStatesSet = new Set();
     
     // Settings
-    let advancedBiblical = false; // Set true to show all biblical entries regardless of confidence.
+    let advancedBiblical = false; // Set to true to show all biblical entries regardless of confidence.
     
     /***********************
      * ICON DEFINITIONS
@@ -184,7 +184,6 @@
           results.data.forEach(function(row) {
             let cityName = row["City"] ? row["City"].trim() : "";
             if (!cityName) return;
-            // Save the original display name in title case.
             let displayLabel = titleCase(cityName);
             let groupKey = getBaseGroup(cityName);
             let country = (row["Country"] || "").toUpperCase();
@@ -197,8 +196,17 @@
             let label = displayLabel + (state ? " (" + state + ")" : "");
             let iconToUse = (country === "US") ? iconCityUS : iconCityUK;
             let marker = L.marker([lat, lng], { icon: iconToUse });
-            // Save all data along with groupKey and displayLabel.
-            marker.myData = { type: "city", label: label, displayLabel: displayLabel, country: country, state: state, lat: lat, lng: lng, groupKey: groupKey, frozen: false };
+            marker.myData = { 
+              type: "city", 
+              label: label, 
+              displayLabel: displayLabel, 
+              country: country, 
+              state: state, 
+              lat: lat, 
+              lng: lng, 
+              groupKey: groupKey, 
+              frozen: false 
+            };
             marker.on('click', function() { showCityPopup(this); });
             usUkMarkers.push(marker);
           });
@@ -236,9 +244,13 @@
                       return [sum[0] / parsedCoords.length, sum[1] / parsedCoords.length];
                     })()
                   : parsedCoords[0];
-                // Also get biblical references (if any) from the CSV.
                 let biblicalReferences = row["Biblical References"] ? row["Biblical References"].trim() : "";
-                biblicalDataMap[groupKey] = { lat: point[0], lng: point[1], polygon: (parsedCoords.length >= 3 ? parsedCoords : null), biblicalReferences: biblicalReferences };
+                biblicalDataMap[groupKey] = { 
+                  lat: point[0], 
+                  lng: point[1], 
+                  polygon: (parsedCoords.length >= 3 ? parsedCoords : null), 
+                  biblicalReferences: biblicalReferences 
+                };
                 console.log("Stored biblical data for group:", groupKey, biblicalDataMap[groupKey]);
               }
             }
@@ -250,7 +262,6 @@
               let parts = matchStr.split(":");
               if (parts.length < 2) return;
               let matchLabel = parts[0].trim();
-              // Skip markers with missing state or state equal to "N/A"
               let stateMatch = matchLabel.match(/\(([^)]+)\)/);
               let state = stateMatch ? titleCase(stateMatch[1].trim()) : "";
               if (!state || state.toUpperCase() === "N/A") {
@@ -264,12 +275,19 @@
               if (latlngArr.length < 2) return;
               let lat = parseFloat(latlngArr[0]);
               let lng = parseFloat(latlngArr[1]);
-              // Set display label to title case.
               let displayMatchLabel = titleCase(matchLabel);
               let marker = L.marker([lat, lng], { icon: iconUSBiblical });
-              // Also store biblical references from the CSV row.
               let biblicalReferences = row["Biblical References"] ? row["Biblical References"].trim() : "";
-              marker.myData = { type: "usBiblical", label: displayMatchLabel, state: state, lat: lat, lng: lng, groupKey: groupKey, biblicalReferences: biblicalReferences, frozen: false };
+              marker.myData = { 
+                type: "usBiblical", 
+                label: displayMatchLabel, 
+                state: state, 
+                lat: lat, 
+                lng: lng, 
+                groupKey: groupKey, 
+                biblicalReferences: biblicalReferences,
+                frozen: false 
+              };
               marker.on('click', function() { showBiblicalPopup(this); });
               usBiblicalMarkers.push(marker);
             });
@@ -289,7 +307,7 @@
     // Popup for US/UK City markers.
     function showCityPopup(marker) {
       let d = marker.myData;
-      // For US rows, only display state if valid.
+      // For US rows, display the state only if valid.
       let stateDisplay = (d.country === "US" && d.state && d.state.toUpperCase() !== "N/A") ? d.state : "";
       let content = "<strong>" + d.displayLabel + "</strong><br>";
       if (stateDisplay) { content += "State: " + stateDisplay + "<br>"; }
@@ -314,6 +332,13 @@
       }
       console.log("City popup for groupKey:", d.groupKey, "content:", content);
       marker.bindPopup(content).openPopup();
+      // Re-run the Sefaria Linker on the popup content.
+      setTimeout(() => {
+        if (typeof sefaria !== "undefined" && sefaria.link) {
+          sefaria.link({ dynamic: true });
+          console.log("Sefaria Linker processed city popup for group:", d.groupKey);
+        }
+      }, 100);
     }
     
     // Popup for US Biblical markers.
@@ -324,7 +349,7 @@
       if (d.biblicalReferences) {
         content += "Biblical References: " + d.biblicalReferences + "<br>";
       }
-      // List matching US Biblical markers (only those with a valid state).
+      // List matching US Biblical markers (only those with a valid state)
       let similar = usBiblicalMarkers.filter(m => m.myData.groupKey === d.groupKey && m.myData.state && m.myData.state.toUpperCase() !== "N/A");
       if (similar.length > 0) {
         content += "<u>US Matching Cities:</u><br>";
@@ -339,11 +364,18 @@
           }
         });
       }
-      // In the biblical popup, do not include a "Fly to US Biblical" button since you're already here;
-      // instead, include a button to fly to the biblical place.
+      // In the biblical popup, do not show a "Fly to US Biblical" button if already at the biblical place.
+      // Instead, include a button to fly to the biblical place.
       content += "<br><button class='btn btn-sm btn-success' onclick='flyToBiblicalPlace(\"" + d.groupKey + "\")'>Fly to Biblical Place</button>";
       console.log("Biblical popup for groupKey:", d.groupKey, "content:", content);
       marker.bindPopup(content).openPopup();
+      // Re-run Sefaria Linker on the popup content.
+      setTimeout(() => {
+        if (typeof sefaria !== "undefined" && sefaria.link) {
+          sefaria.link({ dynamic: true });
+          console.log("Sefaria Linker processed biblical popup for group:", d.groupKey);
+        }
+      }, 100);
     }
     
     // When clicking “Back to US Cities” in a biblical popup.
@@ -366,7 +398,7 @@
         let desiredCountry = type.split("-")[1];
         // Try exact match first.
         foundMarker = usUkMarkers.find(m => m.myData.groupKey === groupKey && m.myData.country === desiredCountry);
-        // Fuzzy search if exact match isn’t found.
+        // If not found, do a fuzzy search.
         if (!foundMarker) {
           foundMarker = usUkMarkers.find(m => m.myData.groupKey.indexOf(groupKey) !== -1);
         }
@@ -407,7 +439,6 @@
         let existing = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey && m.myData.type === "Biblical");
         if (!existing) {
           let marker = L.marker([bib.lat, bib.lng], { icon: iconBiblical }).addTo(map);
-          // Use the stored biblical references (if any) for the marker.
           let biblicalRefs = bib.biblicalReferences ? bib.biblicalReferences : "";
           marker.myData = { type: "Biblical", label: titleCase(groupKey), biblicalReferences: biblicalRefs, lat: bib.lat, lng: bib.lng, groupKey: groupKey, frozen: true };
           marker.on('click', function() { showBiblicalPopup(this); });
@@ -448,7 +479,7 @@
       } else {
         usBiblicalMarkers.forEach(m => { if (!map.hasLayer(m)) map.addLayer(m); });
       }
-      // Filter markers by US state—but do not remove markers that are marked as frozen.
+      // Filter markers by US state – do not remove markers marked as frozen.
       let stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox]");
       let selectedStates = [];
       stateInputs.forEach(cb => { if (cb.checked) selectedStates.push(cb.value.trim().toLowerCase()); });
@@ -497,7 +528,7 @@
         container.appendChild(onlyBtn);
         container.appendChild(document.createElement("br"));
       });
-      // “Select All States” button: check all boxes.
+      // “Select All States” button.
       document.getElementById("selectAllStates").onclick = function() {
         let inputs = container.querySelectorAll("input[type=checkbox]");
         inputs.forEach(inp => { inp.checked = true; });
@@ -574,6 +605,7 @@
   <!-- Sefaria Linker Script -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
+    // Initialize the Sefaria Linker on page load.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
