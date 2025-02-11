@@ -156,7 +156,7 @@
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
   <!-- Leaflet Awesome Markers JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
-  
+
   <script>
     /***********************
      * UTILITY FUNCTIONS
@@ -178,7 +178,7 @@
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
       });
     }
-    // Parse CSV coordinate strings; swap if necessary.
+    // Parse CSV coordinate strings; if swap is true, convert from long/lat to lat/lng.
     function parseCoordinates(coordStr, swap = false) {
       coordStr = coordStr.trim();
       if (!coordStr) return [];
@@ -192,7 +192,7 @@
       let arr = parseCoordinates(coordStr, swap);
       return (arr.length > 0) ? arr[0] : [0, 0];
     }
-    // Normalize Testament values: "Old Testament", "New Testament", or "Both".
+    // Normalize Testament values to "old", "new", or "both"
     function normalizeTestament(testament) {
       let t = testament.trim().toLowerCase();
       if (t.indexOf("old") !== -1) return "old";
@@ -326,7 +326,7 @@
     /*****************************************************
      * LAZY CSV LOADING FUNCTIONS
      *****************************************************/
-    // Load US‑UK Cities (CSV file remains the same)
+    // Load US‑UK Cities
     function loadUsUkCities() {
       if (usUkLoaded) return;
       console.log("Loading US–UK Cities...");
@@ -374,8 +374,7 @@
       });
     }
     
-    // Load US Biblical Cities from processed_biblical_places_sorted.csv  
-    // Using "Sorted Biblical References" for biblical references.
+    // Load US Biblical Cities from processed_biblical_places_sorted.csv
     function loadUsBiblicalCities() {
       if (usBiblicalLoaded) return;
       console.log("Loading US Biblical Cities...");
@@ -411,7 +410,7 @@
                 console.log("Stored biblical data for group:", groupKey, biblicalDataMap[groupKey]);
               }
             }
-            // Process the "US Matching Cities" column.
+            // Process US Matching Cities column.
             let usMatchesRaw = row["US Matching Cities"] ? row["US Matching Cities"].trim() : "";
             let usMatches = usMatchesRaw.split(";").map(s => s.trim()).filter(s => s !== "");
             usMatches.forEach(function(matchStr) {
@@ -516,7 +515,7 @@
     }
     
     // When flying to a marker, change its icon to the highlight icon for 20 seconds,
-    // and open its popup when the map movement ends.
+    // then open its popup (ensuring it remains clickable).
     function flyToLocation(lat, lng, name, type) {
       let groupKey = getBaseGroup(name);
       let foundMarker = null;
@@ -545,11 +544,10 @@
         }
         let orig = foundMarker.options.icon;
         foundMarker.setIcon(highlightIcon);
-        setTimeout(() => { foundMarker.setIcon(orig); }, 20000);
+        setTimeout(() => { foundMarker.setIcon(orig); }, 2000);
         map.flyTo(foundMarker.getLatLng(), 10, { duration: 1.5 });
         map.once('moveend', () => { 
-          // Ensure the popup is open and clickable
-          foundMarker.openPopup(); 
+          foundMarker.openPopup();
         });
       } else {
         let tempIcon = (type.startsWith("City-"))
@@ -559,7 +557,7 @@
         tempMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey, frozen: true };
         map.flyTo([lat, lng], 10, { duration: 1.5 });
         map.once('moveend', () => { tempMarker.openPopup(); });
-        setTimeout(() => { map.removeLayer(tempMarker); }, 20000);
+        setTimeout(() => { map.removeLayer(tempMarker); }, 2000);
       }
       console.log("Flying to " + name + " (" + type + ") with groupKey: " + groupKey + " at " + lat + ", " + lng);
     }
@@ -578,9 +576,11 @@
           existing = marker;
           console.log("Created new biblical marker for group:", groupKey);
         }
+        // If the biblical data has a polygon, display it.
         if (bib.polygon) {
           let poly = L.polygon(bib.polygon, { color: "green", weight: 3 }).addTo(map);
-          setTimeout(() => { map.removeLayer(poly); }, 20000);
+          // Remove the polygon after 20 seconds.
+          setTimeout(() => { map.removeLayer(poly); }, 2000);
         }
         map.flyTo([bib.lat, bib.lng], 10, { duration: 1.5 });
         map.once('moveend', () => { existing.openPopup(); });
@@ -595,6 +595,7 @@
     function updateMarkersVisibility() {
       const filters = getFilterSettings();
       
+      // Load markers if needed.
       if (filters.toggleUSUK && !usUkLoaded) { loadUsUkCities(); }
       if (filters.toggleUSBiblical && !usBiblicalLoaded) { loadUsBiblicalCities(); }
       
@@ -607,7 +608,8 @@
       // Add US‑UK markers that pass the state filter.
       usUkMarkers.forEach(m => {
         let d = m.myData;
-        if (d.country === "US" && d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
+        // If state filter exists and this marker’s state is not in it, skip it.
+        if (d.country === "US" && d.state && filters.selectedStates.length > 0 && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1) {
           return;
         }
         if (filters.toggleUSUK) {
@@ -618,7 +620,7 @@
       // Add US Biblical markers that pass state and Testament filters.
       usBiblicalMarkers.forEach(m => {
         let d = m.myData;
-        if (d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) return;
+        if (d.state && filters.selectedStates.length > 0 && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1) return;
         let markerTestament = normalizeTestament(d.testament || "Both");
         if (filters.testament !== "both" && markerTestament !== filters.testament) return;
         if (filters.toggleUSBiblical) {
@@ -632,7 +634,8 @@
         }
       });
       
-      // Add layer groups to the map.
+      // Add layer groups to the map if their corresponding toggles are on;
+      // otherwise remove them so that no markers appear.
       if (filters.toggleUSUK) { usUkLayerGroup.addTo(map); } else { map.removeLayer(usUkLayerGroup); }
       if (filters.toggleUSBiblical) {
         oldBiblicalLayerGroup.addTo(map);
@@ -650,6 +653,7 @@
      *****************************************************/
     function buildFilterPanel() {
       const initialFilters = getInitialFiltersFromUrl();
+      // Desktop panel
       let container = document.getElementById("us-states-filter");
       container.innerHTML = "";
       let states = Array.from(usStatesSet).sort();
@@ -660,7 +664,7 @@
         checkbox.type = "checkbox";
         checkbox.id = checkboxId;
         checkbox.value = state;
-        // Default: if no URL filter exists, check all.
+        // Default: if no URL filter exists, check all; if URL exists, use that.
         checkbox.checked = initialFilters.states ? initialFilters.states.includes(state.toLowerCase()) : true;
         checkbox.addEventListener("change", () => { updateUrlWithFilters(); updateMarkersVisibility(); });
         container.appendChild(checkbox);
@@ -689,7 +693,7 @@
         updateMarkersVisibility();
       });
       
-      // Build mobile panel by cloning the desktop version.
+      // Mobile panel: clone desktop content.
       let mobileContainer = document.getElementById("us-states-filter-mobile");
       if (mobileContainer) {
         mobileContainer.innerHTML = container.innerHTML;
