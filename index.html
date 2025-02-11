@@ -35,30 +35,7 @@
       font-size: 0.9rem;
       width: 280px;
     }
-    /* Search results styling */
-    #searchResults, #searchResults_mobile {
-      max-height: 150px;
-      overflow-y: auto;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      display: none;
-      margin-top: 5px;
-      padding-left: 0;
-    }
-    #searchResults li, #searchResults_mobile li {
-      list-style: none;
-      padding: 5px;
-      cursor: pointer;
-    }
-    #searchResults li:hover, #searchResults_mobile li:hover {
-      background-color: #f0f0f0;
-    }
-    /* Limit popup size so long popups don’t cover the clicked marker */
-    .leaflet-popup-content {
-      max-height: 300px;
-      overflow-y: auto;
-    }
-    /* Mobile adjustments */
+    /* Mobile offcanvas panel overrides */
     @media (max-width: 768px) {
       .offcanvas { width: 80% !important; }
       .offcanvas-body {
@@ -73,38 +50,56 @@
         display: none;
       }
     }
+    /* Limit popup size */
+    .leaflet-popup-content {
+      max-height: 300px;
+      overflow-y: auto;
+    }
   </style>
 </head>
 <body>
   <!-- Map container -->
   <div id="map"></div>
-  
+
   <!-- Desktop fixed filter panel (visible on large screens) -->
   <div id="filter-panel-fixed" class="d-none d-lg-block shadow">
     <h5>Filter Markers</h5>
+    <!-- Toggle controls – default checked -->
     <div class="mb-2 form-check">
-      <input type="checkbox" id="toggleUSUK" class="form-check-input">
+      <input type="checkbox" id="toggleUSUK" class="form-check-input" checked>
       <label for="toggleUSUK" class="form-check-label">Show US‑UK Cities</label>
     </div>
     <div class="mb-2 form-check">
-      <input type="checkbox" id="toggleUSBiblical" class="form-check-input">
+      <input type="checkbox" id="toggleUSBiblical" class="form-check-input" checked>
       <label for="toggleUSBiblical" class="form-check-label">Show US Biblical Cities</label>
     </div>
+    <!-- Testament filter control -->
+    <div class="mb-2">
+      <strong>Testament:</strong>
+      <select id="testamentFilter" class="form-select form-select-sm">
+        <option value="both" selected>Both</option>
+        <option value="old">Old Testament</option>
+        <option value="new">New Testament</option>
+      </select>
+    </div>
+    <!-- State filter panel (all states checked by default) -->
     <div class="mb-2">
       <strong>US States:</strong>
       <div id="us-states-filter"></div>
       <button id="selectAllStates" class="btn btn-sm btn-primary mt-2">Select All States</button>
     </div>
+    <!-- Zoom All Button -->
     <div class="mt-2">
       <button id="zoomAllBtn" class="btn btn-sm btn-warning">Zoom to All Markers</button>
     </div>
+    <!-- Search Box -->
     <div class="mt-3">
       <label for="citySearch" class="form-label">Search (by group):</label>
       <input type="text" id="citySearch" class="form-control form-control-sm" placeholder="Type to search...">
       <ul id="searchResults"></ul>
     </div>
   </div>
-  
+
   <!-- Mobile offcanvas filter panel (visible on small screens) -->
   <div class="offcanvas offcanvas-start d-lg-none" tabindex="-1" id="filterPanelOffcanvas" aria-labelledby="filterPanelOffcanvasLabel">
     <div class="offcanvas-header">
@@ -112,14 +107,22 @@
       <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
-      <!-- Mobile controls mirror the desktop ones -->
+      <!-- Mobile controls mirror desktop controls -->
       <div class="mb-2 form-check">
-        <input type="checkbox" id="toggleUSUK_mobile" class="form-check-input">
+        <input type="checkbox" id="toggleUSUK_mobile" class="form-check-input" checked>
         <label for="toggleUSUK_mobile" class="form-check-label">Show US‑UK Cities</label>
       </div>
       <div class="mb-2 form-check">
-        <input type="checkbox" id="toggleUSBiblical_mobile" class="form-check-input">
+        <input type="checkbox" id="toggleUSBiblical_mobile" class="form-check-input" checked>
         <label for="toggleUSBiblical_mobile" class="form-check-label">Show US Biblical Cities</label>
+      </div>
+      <div class="mb-2">
+        <strong>Testament:</strong>
+        <select id="testamentFilter_mobile" class="form-select form-select-sm">
+          <option value="both" selected>Both</option>
+          <option value="old">Old Testament</option>
+          <option value="new">New Testament</option>
+        </select>
       </div>
       <div class="mb-2">
         <strong>US States:</strong>
@@ -136,12 +139,12 @@
       </div>
     </div>
   </div>
-  
+
   <!-- Mobile filter toggle button -->
   <button class="btn btn-primary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterPanelOffcanvas" aria-controls="filterPanelOffcanvas" style="position: absolute; top: 10px; right: 10px; z-index: 1200;">
     Filters
   </button>
-  
+
   <!-- Scripts -->
   <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
@@ -175,34 +178,61 @@
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
       });
     }
+    // Parse CSV coordinate strings; swap if necessary.
     function parseCoordinates(coordStr, swap = false) {
       coordStr = coordStr.trim();
       if (!coordStr) return [];
       let pairs = coordStr.split(" ").filter(s => s.trim() !== "");
       return pairs.map(pair => {
         let coords = pair.split(",");
-        if (swap) {
-          return [parseFloat(coords[1]), parseFloat(coords[0])];
-        } else {
-          return [parseFloat(coords[0]), parseFloat(coords[1])];
-        }
+        return swap ? [parseFloat(coords[1]), parseFloat(coords[0])] : [parseFloat(coords[0]), parseFloat(coords[1])];
       });
     }
     function parseFirstCoordinate(coordStr, swap = false) {
       let arr = parseCoordinates(coordStr, swap);
       return (arr.length > 0) ? arr[0] : [0, 0];
     }
+    // Normalize Testament values: "Old Testament", "New Testament", or "Both".
+    function normalizeTestament(testament) {
+      let t = testament.trim().toLowerCase();
+      if (t.indexOf("old") !== -1) return "old";
+      if (t.indexOf("new") !== -1) return "new";
+      return "both";
+    }
     
     /***********************
-     * GLOBAL VARIABLES
+     * GLOBAL VARIABLES & MAP INITIALIZATION
      ***********************/
-    let usUkMarkers = [];
-    let usBiblicalMarkers = [];
+    // Initialize map without any markers.
+    let map = L.map('map').setView([39.50, -98.35], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(map);
+    
+    // Create layer groups for markers.
+    const usUkLayerGroup = L.layerGroup().addTo(map);
+    const oldBiblicalLayerGroup = L.layerGroup();
+    const newBiblicalLayerGroup = L.layerGroup();
+    const bothBiblicalLayerGroup = L.layerGroup();
+    
+    // Popup options.
+    const popupOptions = {
+      maxWidth: 250,
+      autoPan: true,
+      autoPanPadding: L.point(10, 100),
+      offset: L.point(0, -10)
+    };
+    
+    /***********************
+     * GLOBAL ARRAYS & OBJECTS
+     ***********************/
+    let usUkMarkers = [];      // US/UK markers
+    let usBiblicalMarkers = [];  // US Biblical markers
     let usUkLoaded = false;
     let usBiblicalLoaded = false;
-    let biblicalDataMap = {};
+    let biblicalDataMap = {};    // keyed by groupKey
     let usStatesSet = new Set();
-    let advancedBiblical = false;
     
     /***********************
      * ICON DEFINITIONS
@@ -212,23 +242,6 @@
     let iconUSBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'purple', prefix: 'glyphicon' });
     let iconBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'green', prefix: 'glyphicon' });
     let highlightIcon = L.AwesomeMarkers.icon({ icon: 'star', markerColor: 'orange', prefix: 'glyphicon' });
-    
-    /***********************
-     * INITIALIZE MAP
-     ***********************/
-    let map = L.map('map').setView([39.50, -98.35], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 18
-    }).addTo(map);
-    
-    // Popup options to keep popups from overrunning the marker
-    const popupOptions = {
-      maxWidth: 250,
-      autoPan: true,
-      autoPanPadding: L.point(10, 100),
-      offset: L.point(0, -10)
-    };
     
     /*****************************************************
      * URL FILTER FUNCTIONS
@@ -240,16 +253,16 @@
         usbiblical: params.get("usbiblical") === "1",
         states: params.get("states")
           ? params.get("states").split(",").map(s => s.trim().toLowerCase())
-          : null
+          : null,
+        testament: params.get("testament") ? normalizeTestament(params.get("testament")) : "both"
       };
     }
-    
-    // Only update URL when the user makes a manual change.
     function updateUrlWithFilters() {
       const filters = getFilterSettings();
       const params = new URLSearchParams(window.location.search);
       params.set("usuk", filters.toggleUSUK ? "1" : "0");
       params.set("usbiblical", filters.toggleUSBiblical ? "1" : "0");
+      params.set("testament", filters.testament);
       if (filters.selectedStates.length > 0) {
         params.set("states", filters.selectedStates.join(","));
       } else {
@@ -259,7 +272,7 @@
     }
     
     /*****************************************************
-     * APPLY FILTERS FROM URL
+     * APPLY FILTERS FROM URL ON LOAD
      *****************************************************/
     function applyFiltersFromUrl() {
       const initialFilters = getInitialFiltersFromUrl();
@@ -274,16 +287,17 @@
       const toggleUSBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
       if (toggleUSUKMobile) toggleUSUKMobile.checked = initialFilters.usuk;
       if (toggleUSBiblicalMobile) toggleUSBiblicalMobile.checked = initialFilters.usbiblical;
+      // Update Testament select controls.
+      const testamentDesktop = document.getElementById("testamentFilter");
+      const testamentMobile = document.getElementById("testamentFilter_mobile");
+      if (testamentDesktop) testamentDesktop.value = initialFilters.testament;
+      if (testamentMobile) testamentMobile.value = initialFilters.testament;
       // Update state checkboxes if a states parameter exists.
       if (initialFilters.states) {
         const stateCheckboxesDesktop = document.querySelectorAll("#us-states-filter input[type=checkbox]");
-        stateCheckboxesDesktop.forEach(cb => {
-          cb.checked = initialFilters.states.includes(cb.value.toLowerCase());
-        });
+        stateCheckboxesDesktop.forEach(cb => { cb.checked = initialFilters.states.includes(cb.value.toLowerCase()); });
         const stateCheckboxesMobile = document.querySelectorAll("#us-states-filter-mobile input[type=checkbox]");
-        stateCheckboxesMobile.forEach(cb => {
-          cb.checked = initialFilters.states.includes(cb.value.toLowerCase());
-        });
+        stateCheckboxesMobile.forEach(cb => { cb.checked = initialFilters.states.includes(cb.value.toLowerCase()); });
       }
       updateMarkersVisibility();
     }
@@ -298,17 +312,21 @@
       const usBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
       const toggleUSUK = (usUkDesktop ? usUkDesktop.checked : false) || (usUkMobile ? usUkMobile.checked : false);
       const toggleUSBiblical = (usBiblicalDesktop ? usBiblicalDesktop.checked : false) || (usBiblicalMobile ? usBiblicalMobile.checked : false);
+      const testamentFilter = document.getElementById("testamentFilter")
+                                ? document.getElementById("testamentFilter").value.toLowerCase()
+                                : (document.getElementById("testamentFilter_mobile") ? document.getElementById("testamentFilter_mobile").value.toLowerCase() : "both");
       const stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox], #us-states-filter-mobile input[type=checkbox]");
       let selectedStates = [];
-      stateInputs.forEach(cb => {
-        if (cb.checked) { selectedStates.push(cb.value.trim().toLowerCase()); }
-      });
-      return { toggleUSUK, toggleUSBiblical, selectedStates };
+      stateInputs.forEach(cb => { if (cb.checked) selectedStates.push(cb.value.trim().toLowerCase()); });
+      const settings = { toggleUSUK, toggleUSBiblical, selectedStates, testament: testamentFilter };
+      console.log("Current filter settings:", settings);
+      return settings;
     }
     
     /*****************************************************
      * LAZY CSV LOADING FUNCTIONS
      *****************************************************/
+    // Load US‑UK Cities (CSV file remains the same)
     function loadUsUkCities() {
       if (usUkLoaded) return;
       console.log("Loading US–UK Cities...");
@@ -356,14 +374,16 @@
       });
     }
     
+    // Load US Biblical Cities from processed_biblical_places_sorted.csv  
+    // Using "Sorted Biblical References" for biblical references.
     function loadUsBiblicalCities() {
       if (usBiblicalLoaded) return;
       console.log("Loading US Biblical Cities...");
-      Papa.parse("processed_biblical_places.csv", {
+      Papa.parse("processed_biblical_places_sorted.csv", {
         download: true,
         header: true,
         complete: function(results) {
-          console.log("Loaded processed_biblical_places.csv, rows:", results.data.length);
+          console.log("Loaded processed_biblical_places_sorted.csv, rows:", results.data.length);
           results.data.forEach(function(row) {
             let placeName = row["Place Name"] ? row["Place Name"].trim() : "";
             if (!placeName) return;
@@ -371,7 +391,7 @@
             let groupKey = getBaseGroup(placeName);
             if (!biblicalDataMap[groupKey]) {
               let coordsStr = row["Coordinates"] ? row["Coordinates"].trim() : "";
-              let parsedCoords = parseCoordinates(coordsStr, true);
+              let parsedCoords = parseCoordinates(coordsStr, true); // CSV stores long,lat
               if (parsedCoords.length > 0) {
                 let point = (parsedCoords.length >= 3)
                   ? (function() {
@@ -379,16 +399,19 @@
                       return [sum[0] / parsedCoords.length, sum[1] / parsedCoords.length];
                     })()
                   : parsedCoords[0];
-                let biblicalReferences = row["Biblical References"] ? row["Biblical References"].trim() : "";
+                let biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
+                let testament = row["Testament"] ? row["Testament"].trim() : "Both";
                 biblicalDataMap[groupKey] = { 
                   lat: point[0], 
                   lng: point[1], 
                   polygon: (parsedCoords.length >= 3 ? parsedCoords : null), 
-                  biblicalReferences: biblicalReferences 
+                  biblicalReferences: biblicalReferences,
+                  testament: testament
                 };
                 console.log("Stored biblical data for group:", groupKey, biblicalDataMap[groupKey]);
               }
             }
+            // Process the "US Matching Cities" column.
             let usMatchesRaw = row["US Matching Cities"] ? row["US Matching Cities"].trim() : "";
             let usMatches = usMatchesRaw.split(";").map(s => s.trim()).filter(s => s !== "");
             usMatches.forEach(function(matchStr) {
@@ -401,7 +424,6 @@
                 console.log("Skipping US Biblical marker for label due to missing state:", matchLabel);
                 return;
               }
-              console.log("Extracted state:", state, "for label:", matchLabel);
               usStatesSet.add(state.toLowerCase());
               let coordPart = parts[1].trim();
               let latlngArr = coordPart.split(",");
@@ -410,7 +432,8 @@
               let lng = parseFloat(latlngArr[1]);
               let displayMatchLabel = titleCase(matchLabel);
               let marker = L.marker([lat, lng], { icon: iconUSBiblical });
-              let biblicalReferences = row["Biblical References"] ? row["Biblical References"].trim() : "";
+              let biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
+              let testament = row["Testament"] ? row["Testament"].trim() : "Both";
               marker.myData = { 
                 type: "usBiblical", 
                 label: displayMatchLabel, 
@@ -419,6 +442,7 @@
                 lng: lng, 
                 groupKey: groupKey, 
                 biblicalReferences: biblicalReferences,
+                testament: testament,
                 frozen: false 
               };
               marker.on('click', function() { showBiblicalPopup(this); });
@@ -430,12 +454,12 @@
           buildFilterPanel();
           updateMarkersVisibility();
         },
-        error: function(err) { console.error("Error loading processed_biblical_places.csv:", err); }
+        error: function(err) { console.error("Error loading processed_biblical_places_sorted.csv:", err); }
       });
     }
     
     /*****************************************************
-     * POPUP BUILDERS
+     * POPUP BUILDERS (popups open immediately)
      *****************************************************/
     function showCityPopup(marker) {
       let d = marker.myData;
@@ -446,27 +470,17 @@
       let similar = usUkMarkers.filter(m => m.myData.groupKey.indexOf(d.groupKey) !== -1);
       if (similar.length > 0) {
         content += "<u>Matching Cities:</u><br>";
-        let seen = {};
         similar.forEach(m => {
           let dd = m.myData;
           if (dd.country === "US" && (!dd.state || dd.state.toUpperCase() === "N/A")) return;
-          let key = dd.displayLabel + " (" + dd.country + ")";
-          if (!seen[key]) {
-            seen[key] = true;
-            let btnType = "City-" + dd.country;
-            content += key + "<br>" +
-              "<button class='btn btn-sm btn-secondary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.displayLabel.replace(/"/g, '\\\"') + "\", \"" + btnType + "\")'>Fly to City (" + dd.country + ")</button><br>";
-          }
+          content += dd.displayLabel + " (" + dd.country + ")<br>" +
+                     "<button class='btn btn-sm btn-secondary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.displayLabel.replace(/"/g, '\\\"') + "\", \"City-" + dd.country + "\")'>Fly to City (" + dd.country + ")</button><br>";
         });
       }
-      console.log("City popup for groupKey:", d.groupKey, "content:", content);
       marker.bindPopup(content, popupOptions).openPopup();
-      setTimeout(() => {
-        if (typeof sefaria !== "undefined" && sefaria.link) {
-          sefaria.link({ dynamic: true });
-          console.log("Sefaria Linker processed city popup for group:", d.groupKey);
-        }
-      }, 100);
+      if (typeof sefaria !== "undefined" && sefaria.link) {
+        sefaria.link({ dynamic: true });
+      }
     }
     
     function showBiblicalPopup(marker) {
@@ -478,26 +492,17 @@
       let similar = usBiblicalMarkers.filter(m => m.myData.groupKey === d.groupKey && m.myData.state && m.myData.state.toUpperCase() !== "N/A");
       if (similar.length > 0) {
         content += "<u>US Matching Cities:</u><br>";
-        let seen = {};
         similar.forEach(m => {
           let dd = m.myData;
-          let key = dd.label + " (State: " + dd.state + ")";
-          if (!seen[key]) {
-            seen[key] = true;
-            content += key + "<br>" +
-              "<button class='btn btn-sm btn-primary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.label.replace(/"/g, '\\\"') + "\", \"US Biblical\")'>Fly to US Biblical</button><br>";
-          }
+          content += dd.label + " (State: " + dd.state + ")<br>" +
+                     "<button class='btn btn-sm btn-primary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.label.replace(/"/g, '\\\"') + "\", \"US Biblical\")'>Fly to US Biblical</button><br>";
         });
       }
       content += "<br><button class='btn btn-sm btn-success' onclick='flyToBiblicalPlace(\"" + d.groupKey + "\")'>Fly to Biblical Place</button>";
-      console.log("Biblical popup for groupKey:", d.groupKey, "content:", content);
       marker.bindPopup(content, popupOptions).openPopup();
-      setTimeout(() => {
-        if (typeof sefaria !== "undefined" && sefaria.link) {
-          sefaria.link({ dynamic: true });
-          console.log("Sefaria Linker processed biblical popup for group:", d.groupKey);
-        }
-      }, 100);
+      if (typeof sefaria !== "undefined" && sefaria.link) {
+        sefaria.link({ dynamic: true });
+      }
     }
     
     function flyToCityView(groupKey) {
@@ -510,6 +515,8 @@
       }
     }
     
+    // When flying to a marker, change its icon to the highlight icon for 20 seconds,
+    // and open its popup when the map movement ends.
     function flyToLocation(lat, lng, name, type) {
       let groupKey = getBaseGroup(name);
       let foundMarker = null;
@@ -523,24 +530,36 @@
         foundMarker = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey);
       }
       if (foundMarker) {
-        if (!map.hasLayer(foundMarker)) { 
-          map.addLayer(foundMarker); 
-          foundMarker.myData.frozen = true;
-          console.log("Re-adding filtered marker for fly-to:", foundMarker.myData.label);
+        // Re-add marker to its proper layer group if needed.
+        if (foundMarker.myData.type === "city") {
+          if (!usUkLayerGroup.hasLayer(foundMarker)) { usUkLayerGroup.addLayer(foundMarker); }
+        } else {
+          let mTestament = normalizeTestament(foundMarker.myData.testament || "Both");
+          if (mTestament === "old") {
+            if (!oldBiblicalLayerGroup.hasLayer(foundMarker)) { oldBiblicalLayerGroup.addLayer(foundMarker); }
+          } else if (mTestament === "new") {
+            if (!newBiblicalLayerGroup.hasLayer(foundMarker)) { newBiblicalLayerGroup.addLayer(foundMarker); }
+          } else {
+            if (!bothBiblicalLayerGroup.hasLayer(foundMarker)) { bothBiblicalLayerGroup.addLayer(foundMarker); }
+          }
         }
         let orig = foundMarker.options.icon;
         foundMarker.setIcon(highlightIcon);
-        setTimeout(() => { foundMarker.setIcon(orig); }, 2000);
+        setTimeout(() => { foundMarker.setIcon(orig); }, 20000);
         map.flyTo(foundMarker.getLatLng(), 10, { duration: 1.5 });
-        foundMarker.openPopup();
+        map.once('moveend', () => { 
+          // Ensure the popup is open and clickable
+          foundMarker.openPopup(); 
+        });
       } else {
         let tempIcon = (type.startsWith("City-"))
           ? ((type.split("-")[1] === "UK") ? iconCityUK : iconCityUS)
           : (type === "US Biblical" ? iconUSBiblical : iconBiblical);
         let tempMarker = L.marker([lat, lng], { icon: highlightIcon }).addTo(map);
         tempMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey, frozen: true };
-        setTimeout(() => { map.removeLayer(tempMarker); }, 2000);
         map.flyTo([lat, lng], 10, { duration: 1.5 });
+        map.once('moveend', () => { tempMarker.openPopup(); });
+        setTimeout(() => { map.removeLayer(tempMarker); }, 20000);
       }
       console.log("Flying to " + name + " (" + type + ") with groupKey: " + groupKey + " at " + lat + ", " + lng);
     }
@@ -561,17 +580,17 @@
         }
         if (bib.polygon) {
           let poly = L.polygon(bib.polygon, { color: "green", weight: 3 }).addTo(map);
-          setTimeout(() => { map.removeLayer(poly); }, 2000);
+          setTimeout(() => { map.removeLayer(poly); }, 20000);
         }
         map.flyTo([bib.lat, bib.lng], 10, { duration: 1.5 });
-        existing.openPopup();
+        map.once('moveend', () => { existing.openPopup(); });
       } else {
         alert("Biblical place data not found for group: " + groupKey);
       }
     }
     
     /*****************************************************
-     * FILTERING & STATE PANEL
+     * UPDATE MARKERS BASED ON FILTERS
      *****************************************************/
     function updateMarkersVisibility() {
       const filters = getFilterSettings();
@@ -579,37 +598,58 @@
       if (filters.toggleUSUK && !usUkLoaded) { loadUsUkCities(); }
       if (filters.toggleUSBiblical && !usBiblicalLoaded) { loadUsBiblicalCities(); }
       
-      if (!filters.toggleUSUK) {
-        usUkMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
-      } else {
-        usUkMarkers.forEach(m => { if (!map.hasLayer(m)) map.addLayer(m); });
-      }
+      // Clear all layer groups.
+      usUkLayerGroup.clearLayers();
+      oldBiblicalLayerGroup.clearLayers();
+      newBiblicalLayerGroup.clearLayers();
+      bothBiblicalLayerGroup.clearLayers();
       
-      if (!filters.toggleUSBiblical) {
-        usBiblicalMarkers.forEach(m => { if (map.hasLayer(m)) map.removeLayer(m); });
-      } else {
-        usBiblicalMarkers.forEach(m => { if (!map.hasLayer(m)) map.addLayer(m); });
-      }
-      
+      // Add US‑UK markers that pass the state filter.
       usUkMarkers.forEach(m => {
         let d = m.myData;
         if (d.country === "US" && d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
-          if (map.hasLayer(m)) map.removeLayer(m);
+          return;
         }
-      });
-      usBiblicalMarkers.forEach(m => {
-        let d = m.myData;
-        if (d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) {
-          if (map.hasLayer(m)) map.removeLayer(m);
+        if (filters.toggleUSUK) {
+          usUkLayerGroup.addLayer(m);
         }
       });
       
-      // (Do not call updateUrlWithFilters() here so that the URL is updated only on user change.)
+      // Add US Biblical markers that pass state and Testament filters.
+      usBiblicalMarkers.forEach(m => {
+        let d = m.myData;
+        if (d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1 && !d.frozen) return;
+        let markerTestament = normalizeTestament(d.testament || "Both");
+        if (filters.testament !== "both" && markerTestament !== filters.testament) return;
+        if (filters.toggleUSBiblical) {
+          if (markerTestament === "old") {
+            oldBiblicalLayerGroup.addLayer(m);
+          } else if (markerTestament === "new") {
+            newBiblicalLayerGroup.addLayer(m);
+          } else {
+            bothBiblicalLayerGroup.addLayer(m);
+          }
+        }
+      });
+      
+      // Add layer groups to the map.
+      if (filters.toggleUSUK) { usUkLayerGroup.addTo(map); } else { map.removeLayer(usUkLayerGroup); }
+      if (filters.toggleUSBiblical) {
+        oldBiblicalLayerGroup.addTo(map);
+        newBiblicalLayerGroup.addTo(map);
+        bothBiblicalLayerGroup.addTo(map);
+      } else {
+        map.removeLayer(oldBiblicalLayerGroup);
+        map.removeLayer(newBiblicalLayerGroup);
+        map.removeLayer(bothBiblicalLayerGroup);
+      }
     }
     
+    /*****************************************************
+     * BUILD FILTER PANEL (state checkboxes default to checked)
+     *****************************************************/
     function buildFilterPanel() {
       const initialFilters = getInitialFiltersFromUrl();
-      // Build desktop filter panel.
       let container = document.getElementById("us-states-filter");
       container.innerHTML = "";
       let states = Array.from(usStatesSet).sort();
@@ -620,10 +660,9 @@
         checkbox.type = "checkbox";
         checkbox.id = checkboxId;
         checkbox.value = state;
-        // If URL filter exists, only check those states; otherwise default to checked.
+        // Default: if no URL filter exists, check all.
         checkbox.checked = initialFilters.states ? initialFilters.states.includes(state.toLowerCase()) : true;
-        checkbox.addEventListener("change", updateUrlWithFilters);
-        checkbox.addEventListener("change", updateMarkersVisibility);
+        checkbox.addEventListener("change", () => { updateUrlWithFilters(); updateMarkersVisibility(); });
         container.appendChild(checkbox);
         let label = document.createElement("label");
         label.htmlFor = checkboxId;
@@ -650,13 +689,12 @@
         updateMarkersVisibility();
       });
       
-      // Build mobile filter panel by cloning the desktop version.
+      // Build mobile panel by cloning the desktop version.
       let mobileContainer = document.getElementById("us-states-filter-mobile");
       if (mobileContainer) {
         mobileContainer.innerHTML = container.innerHTML;
         mobileContainer.querySelectorAll("input[type=checkbox]").forEach(checkbox => {
-          checkbox.addEventListener("change", updateUrlWithFilters);
-          checkbox.addEventListener("change", updateMarkersVisibility);
+          checkbox.addEventListener("change", () => { updateUrlWithFilters(); updateMarkersVisibility(); });
         });
         document.getElementById("selectAllStates_mobile").addEventListener("click", function() {
           mobileContainer.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = true; });
@@ -666,8 +704,10 @@
       }
     }
     
+    /*****************************************************
+     * SET UP CITY SEARCH (desktop and mobile)
+     *****************************************************/
     function setupCitySearch() {
-      // Desktop search.
       let searchInput = document.getElementById("citySearch");
       let resultsList = document.getElementById("searchResults");
       searchInput.addEventListener("input", function() {
@@ -708,7 +748,6 @@
         }
       });
       
-      // Mobile search.
       let searchInputMobile = document.getElementById("citySearch_mobile");
       let resultsListMobile = document.getElementById("searchResults_mobile");
       if (searchInputMobile) {
@@ -765,7 +804,7 @@
     }
     
     /*****************************************************
-     * EVENT LISTENERS FOR TOGGLES
+     * EVENT LISTENERS FOR FILTER CONTROLS
      *****************************************************/
     document.getElementById("toggleUSUK").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     document.getElementById("toggleUSBiblical").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
@@ -775,24 +814,23 @@
     if (document.getElementById("toggleUSBiblical_mobile")) {
       document.getElementById("toggleUSBiblical_mobile").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     }
+    document.getElementById("testamentFilter").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
+    if (document.getElementById("testamentFilter_mobile")) {
+      document.getElementById("testamentFilter_mobile").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
+    }
     
     /*****************************************************
      * INITIAL UI SETUP
      *****************************************************/
     buildFilterPanel();
     setupCitySearch();
-    // On page load, apply URL filter settings.
     document.addEventListener("DOMContentLoaded", applyFiltersFromUrl);
-    
-    /*****************************************************
-     * Sefaria Linker Initialization
-     *****************************************************/
-    // The Sefaria Linker uses a POST API internally, so no changes are needed here.
   </script>
   
-  <!-- Sefaria Linker Script -->
+  <!-- Sefaria Linker Script (uses POST internally) -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
+    // Initialize the Sefaria Linker in popup-click mode with dynamic content.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
