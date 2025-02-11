@@ -64,7 +64,7 @@
   <!-- Desktop fixed filter panel (visible on large screens) -->
   <div id="filter-panel-fixed" class="d-none d-lg-block shadow">
     <h5>Filter Markers</h5>
-    <!-- Toggle controls – default unchecked so markers don’t show until toggled -->
+    <!-- Toggle controls – markers will not appear until toggled on -->
     <div class="mb-2 form-check">
       <input type="checkbox" id="toggleUSUK" class="form-check-input">
       <label for="toggleUSUK" class="form-check-label">Show US‑UK Cities</label>
@@ -178,7 +178,7 @@
         return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
       });
     }
-    // Parse CSV coordinate strings; swap if needed.
+    // Parse CSV coordinate strings; if swap is true, assume CSV order is long,lat and swap to [lat, lng].
     function parseCoordinates(coordStr, swap = false) {
       coordStr = coordStr.trim();
       if (!coordStr) return [];
@@ -192,7 +192,7 @@
       let arr = parseCoordinates(coordStr, swap);
       return (arr.length > 0) ? arr[0] : [0, 0];
     }
-    // Normalize Testament values: "old", "new", or "both".
+    // Normalize Testament values to "old", "new", or "both".
     function normalizeTestament(testament) {
       let t = testament.trim().toLowerCase();
       if (t.indexOf("old") !== -1) return "old";
@@ -203,20 +203,20 @@
     /***********************
      * GLOBAL VARIABLES & MAP INITIALIZATION
      ***********************/
-    // Initialize the map without markers.
+    // Initialize the map without adding any markers.
     let map = L.map('map').setView([39.50, -98.35], 4);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 18
     }).addTo(map);
     
-    // Create layer groups for markers.
+    // Create layer groups.
     const usUkLayerGroup = L.layerGroup();
     const oldBiblicalLayerGroup = L.layerGroup();
     const newBiblicalLayerGroup = L.layerGroup();
     const bothBiblicalLayerGroup = L.layerGroup();
     
-    // Popup options.
+    // Popup options – popups remain open until manually closed.
     const popupOptions = {
       maxWidth: 250,
       autoPan: true,
@@ -229,11 +229,11 @@
     /***********************
      * GLOBAL ARRAYS & OBJECTS
      ***********************/
-    let usUkMarkers = [];      // US/UK markers
-    let usBiblicalMarkers = [];  // US Biblical markers
+    let usUkMarkers = [];      // Array for US/UK markers
+    let usBiblicalMarkers = [];  // Array for US Biblical markers
     let usUkLoaded = false;
     let usBiblicalLoaded = false;
-    let biblicalDataMap = {};    // keyed by groupKey
+    let biblicalDataMap = {};    // keyed by groupKey for biblical data
     let usStatesSet = new Set();
     
     /***********************
@@ -341,12 +341,19 @@
             let label = displayLabel + (state ? " (" + state + ")" : "");
             let iconToUse = (country === "US") ? iconCityUS : iconCityUK;
             let marker = L.marker([lat, lng], { icon: iconToUse });
-            marker.myData = { type: "city", label: label, displayLabel: displayLabel, country: country, state: state, lat: lat, lng: lng, groupKey: groupKey, frozen: false };
-            // Only open popup if not already open.
+            marker.myData = { 
+              type: "city", 
+              label: label, 
+              displayLabel: displayLabel, 
+              country: country, 
+              state: state, 
+              lat: lat, 
+              lng: lng, 
+              groupKey: groupKey, 
+              frozen: false 
+            };
             marker.on('click', function() {
-              if (!this.isPopupOpen()) {
-                showCityPopup(this);
-              }
+              if (!this.isPopupOpen()) { showCityPopup(this); }
             });
             usUkMarkers.push(marker);
           });
@@ -375,7 +382,8 @@
             let groupKey = getBaseGroup(placeName);
             if (!biblicalDataMap[groupKey]) {
               let coordsStr = row["Coordinates"] ? row["Coordinates"].trim() : "";
-              let parsedCoords = parseCoordinates(coordsStr, true); // CSV stores long,lat
+              // Remember: Biblical CSV coordinates are stored as long,lat.
+              let parsedCoords = parseCoordinates(coordsStr, true);
               if (parsedCoords.length > 0) {
                 let point = (parsedCoords.length >= 3)
                   ? (function() {
@@ -429,13 +437,9 @@
                 testament: testament,
                 frozen: false 
               };
-              // Only open popup if not already open.
               marker.on('click', function() {
-                if (!this.isPopupOpen()) {
-                  showBiblicalPopup(this);
-                }
+                if (!this.isPopupOpen()) { showBiblicalPopup(this); }
               });
-              // On popup close, mark as unfrozen.
               marker.on('popupclose', function() {
                 console.log("Popup closed for biblical marker:", this.myData.label);
                 this.myData.frozen = false;
@@ -453,8 +457,51 @@
     }
     
     /*****************************************************
-     * POPUP BUILDERS (popups open immediately)
+     * BIBLICAL REFERENCE POPUP BUILDER
      *****************************************************/
+    // This function groups comma‐separated biblical references into Old and New Testament clusters.
+    function buildBiblicalPopupContent(refString) {
+      if (!refString) return "";
+      let refs = refString.split(",").map(r => r.trim()).filter(r => r);
+      let groups = { old: {}, new: {} };
+      // Define a set of New Testament abbreviations (in lower case).
+      let ntAbbr = new Set(["matt", "mark", "luke", "john", "acts", "rom", "1 cor", "2 cor", "gal", "eph", "phil", "col", "1 thess", "2 thess", "1 tim", "2 tim", "titus", "philem", "heb", "james", "1 pet", "2 pet", "1 john", "2 john", "3 john", "jude", "rev"]);
+      refs.forEach(ref => {
+        // Allow for either a space or a colon between the book and the chapter:verse.
+        let match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
+        if (match) {
+          let book = match[1].trim();
+          let verses = match[2].trim();
+          let normBook = book.toLowerCase();
+          let testament = ntAbbr.has(normBook) ? "new" : "old";
+          if (!groups[testament][book]) {
+            groups[testament][book] = [];
+          }
+          groups[testament][book].push(verses);
+        }
+      });
+      let html = "";
+      if (Object.keys(groups.old).length > 0) {
+        html += "<div><h6>Old Testament</h6><ul>";
+        for (let book in groups.old) {
+          html += "<li><strong>" + book + ":</strong> " + groups.old[book].join(", ") + "</li>";
+        }
+        html += "</ul></div>";
+      }
+      if (Object.keys(groups.new).length > 0) {
+        html += "<div><h6>New Testament</h6><ul>";
+        for (let book in groups.new) {
+          html += "<li><strong>" + book + ":</strong> " + groups.new[book].join(", ") + "</li>";
+        }
+        html += "</ul></div>";
+      }
+      return html;
+    }
+    
+    /*****************************************************
+     * POPUP BUILDERS
+     *****************************************************/
+    // US‑UK marker popup.
     function showCityPopup(marker) {
       if (marker.isPopupOpen()) return;
       let d = marker.myData;
@@ -462,27 +509,27 @@
       let content = "<strong>" + d.displayLabel + "</strong><br>";
       if (stateDisplay) { content += "State: " + stateDisplay + "<br>"; }
       content += "Country: " + d.country + "<br>";
-      // Get matching cities (deduplicate UK entries by using a Set key)
       let similar = usUkMarkers.filter(m => m.myData.groupKey.indexOf(d.groupKey) !== -1);
       if (similar.length > 0) {
         content += "<u>Matching Cities:</u><br>";
         let seen = new Set();
         similar.forEach(m => {
           let dd = m.myData;
-          // Skip US markers that lack a valid state.
-          if (dd.country === "US" && (!dd.state || dd.state.toUpperCase() === "N/A")) return;
-          let key = dd.displayLabel + "|" + dd.country;
+          // Skip duplicate entries.
+          let key = dd.displayLabel.trim().toLowerCase() + "|" + dd.country.trim().toLowerCase();
           if (seen.has(key)) return;
           seen.add(key);
-          // For US markers, button reads "Fly to [STATE]"; for UK markers, "Fly to [CITY], [COUNTRY]"
-          let btnText = (dd.country === "US" && dd.state) ? "Fly to " + dd.state
-                      : (dd.country === "UK") ? "Fly to " + dd.displayLabel + ", " + dd.country
-                      : "Fly to City (" + dd.country + ")";
+          // For US markers: button text "Fly to [STATE]"; for UK markers: "Fly to [CITY], UK".
+          let btnText = (dd.country === "US" && dd.state)
+                        ? "Fly to " + dd.state
+                        : (dd.country === "UK")
+                          ? "Fly to " + dd.displayLabel + ", " + dd.country
+                          : "Fly to City (" + dd.country + ")";
           content += dd.displayLabel + " (" + dd.country + ")<br>" +
                      "<button class='btn btn-sm btn-secondary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.displayLabel.replace(/"/g, '\\\"') + "\", \"City-" + dd.country + "\")'>" + btnText + "</button><br>";
         });
       }
-      marker.off('click');  // Prevent repeated binding.
+      marker.off('click');
       marker.bindPopup(content, popupOptions).openPopup();
       marker.on('popupclose', function() {
         marker.on('click', function() {
@@ -494,26 +541,27 @@
       }
     }
     
+    // US Biblical marker popup.
     function showBiblicalPopup(marker) {
       if (marker.isPopupOpen()) return;
       let d = marker.myData;
       let content = "<strong>" + d.label + "</strong><br>";
-      if (d.biblicalReferences) {
-        content += "Biblical References: " + d.biblicalReferences + "<br>";
-      }
+      // Insert grouped biblical references.
+      content += buildBiblicalPopupContent(d.biblicalReferences);
+      // Also list matching US Biblical cities (deduplicated).
       let similar = usBiblicalMarkers.filter(m => m.myData.groupKey === d.groupKey && m.myData.state && m.myData.state.toUpperCase() !== "N/A");
       if (similar.length > 0) {
-        content += "<u>US Matching Cities:</u><br>";
-        // Use a Set to remove duplicates.
+        content += "<div><u>US Matching Cities:</u><br>";
         let seen = new Set();
         similar.forEach(m => {
           let dd = m.myData;
-          let key = dd.label + "|" + dd.state;
+          let key = dd.label.trim().toLowerCase() + "|" + dd.state.trim().toLowerCase();
           if (seen.has(key)) return;
           seen.add(key);
           content += dd.label + " (State: " + dd.state + ")<br>" +
                      "<button class='btn btn-sm btn-primary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.label.replace(/"/g, '\\\"') + "\", \"US Biblical\")'>Fly to US Biblical</button><br>";
         });
+        content += "</div>";
       }
       content += "<br><button class='btn btn-sm btn-success' onclick='flyToBiblicalPlace(\"" + d.groupKey + "\")'>Fly to Biblical Place</button>";
       marker.off('click');
@@ -538,7 +586,7 @@
       }
     }
     
-    // When flying to a marker, change its icon for 2 seconds, fly to it, then open its popup.
+    // Fly to a marker: change its icon for 2 seconds, fly to it, then open its popup.
     function flyToLocation(lat, lng, name, type) {
       let groupKey = getBaseGroup(name);
       let foundMarker = null;
@@ -553,7 +601,6 @@
       }
       if (foundMarker) {
         console.log("Fly-to found marker:", foundMarker.myData.label);
-        // Mark marker as frozen so it isn’t removed by filters.
         foundMarker.myData.frozen = true;
         let orig = foundMarker.options.icon;
         foundMarker.setIcon(highlightIcon);
@@ -567,7 +614,6 @@
             }
             console.log("Fly-to popup opened for:", foundMarker.myData.label);
           }
-          // Revert icon and unfreeze marker.
           foundMarker.setIcon(orig);
           foundMarker.myData.frozen = false;
           updateMarkersVisibility();
@@ -600,7 +646,7 @@
       } else {
         console.log("No marker found for fly-to, creating temporary marker for:", name);
         let tempIcon = (type.startsWith("City-"))
-          ? ((type.split("-")[1] === "UK") ? iconCityUK : iconCityUS)
+          ? ((type.split("-")[1].trim().toLowerCase() === "uk") ? iconCityUK : iconCityUS)
           : (type === "US Biblical" ? iconUSBiblical : iconBiblical);
         let tempMarker = L.marker([lat, lng], { icon: highlightIcon }).addTo(map);
         tempMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey };
@@ -653,17 +699,17 @@
     function updateMarkersVisibility() {
       const filters = getFilterSettings();
       
-      // Load markers if toggled on.
+      // Load markers if necessary.
       if (filters.toggleUSUK && !usUkLoaded) { loadUsUkCities(); }
       if (filters.toggleUSBiblical && !usBiblicalLoaded) { loadUsBiblicalCities(); }
       
-      // Clear all layer groups.
+      // Clear layer groups.
       usUkLayerGroup.clearLayers();
       oldBiblicalLayerGroup.clearLayers();
       newBiblicalLayerGroup.clearLayers();
       bothBiblicalLayerGroup.clearLayers();
       
-      // Add US‑UK markers if the toggle is checked.
+      // Add US‑UK markers if the toggle is on.
       if (filters.toggleUSUK) {
         usUkMarkers.forEach(m => {
           let d = m.myData;
@@ -674,7 +720,7 @@
         });
       }
       
-      // Add US Biblical markers if the toggle is checked and they pass the state and Testament filters.
+      // Add US Biblical markers if the toggle is on and they pass state and Testament filters.
       if (filters.toggleUSBiblical) {
         usBiblicalMarkers.forEach(m => {
           let d = m.myData;
@@ -691,7 +737,6 @@
         });
       }
       
-      // Only add layer groups to the map if the corresponding toggle is checked.
       if (filters.toggleUSUK) { usUkLayerGroup.addTo(map); } else { map.removeLayer(usUkLayerGroup); }
       if (filters.toggleUSBiblical) {
         oldBiblicalLayerGroup.addTo(map);
@@ -888,7 +933,7 @@
   <!-- Sefaria Linker Script (uses POST internally) -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
-    // Initialize the Sefaria Linker in popup-click mode with dynamic content.
+    // Initialize Sefaria Linker in popup-click mode with dynamic content.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
