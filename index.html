@@ -262,6 +262,7 @@
     }
     // Normalize biblical book names (e.g. "jonahum" to "jonah").
     // Normalizes biblical book names so that variations like "ii kings", "2 kings", or "2kings" are all returned as "II Kings" (and similarly for Samuel and Chronicles).
+// Normalize biblical book names so that variations like "ii kings", "2 kings", or "2kings" are returned as "II Kings" (and similarly for Samuel and Chronicles).
 function normalizeBiblicalBook(book) {
   const b = book.trim().toLowerCase();
   if (b === "jonahum") return "Jonah";
@@ -298,11 +299,13 @@ function normalizeBiblicalBook(book) {
       if (ref.chapter === range.endChapter && ref.verse > range.endVerse) return false;
       return true;
     }
-    function buildBiblicalPopupContent(refString) {
+    // Build biblical popup content and highlight matching verses based on the "Book/Chapter" filter.
+// If the filter type is "book" and no chapter is provided, then all references from the selected book will be highlighted.
+function buildBiblicalPopupContent(refString) {
   if (!refString) return "";
   const refs = refString.split(",").map(r => r.trim()).filter(r => r);
   const groups = { old: {}, new: {} };
-  // Set of New Testament abbreviations (in lowercase)
+  // New Testament abbreviations (in lowercase)
   const ntAbbr = new Set([
     "matt", "mark", "luke", "john", "acts", "rom",
     "1 cor", "2 cor", "gal", "eph", "phil", "col",
@@ -311,18 +314,47 @@ function normalizeBiblicalBook(book) {
     "1 john", "2 john", "3 john", "jude", "rev"
   ]);
 
+  // Get the current biblical filter settings
+  const filters = getFilterSettings();
+  const selectedBook = (filters.bibRefFilterType === "book" && filters.bibRefBook)
+                         ? normalizeBiblicalBook(filters.bibRefBook)
+                         : null;
+  // If a chapter is provided, parse it; otherwise, null means whole-book match.
+  const selectedChapter = (filters.bibRefFilterType === "book" && filters.bibRefChapter)
+                           ? parseInt(filters.bibRefChapter)
+                           : null;
+
   refs.forEach(ref => {
     const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
     if (match) {
       const rawBook = match[1].trim();
       const normalizedBook = normalizeBiblicalBook(rawBook);
       const verses = match[2].trim();
-      // Determine testament based on the normalized book.
       const testament = ntAbbr.has(normalizedBook.toLowerCase()) ? "new" : "old";
+      
+      // Determine if this reference should be highlighted.
+      let highlight = false;
+      if (selectedBook && normalizedBook === selectedBook) {
+        if (selectedChapter) {
+          // If chapter provided, highlight only if the chapter matches.
+          const chapMatch = ref.match(/^([\D]+)[\s:]+(\d+):/);
+          if (chapMatch) {
+            const chapter = parseInt(chapMatch[2]);
+            if (chapter === selectedChapter) {
+              highlight = true;
+            }
+          }
+        } else {
+          // No chapter provided—highlight all references from the selected book.
+          highlight = true;
+        }
+      }
+      const displayVerses = highlight ? `<span style="background:yellow">${verses}</span>` : verses;
+      
       if (!groups[testament][normalizedBook]) {
         groups[testament][normalizedBook] = [];
       }
-      groups[testament][normalizedBook].push(verses);
+      groups[testament][normalizedBook].push(displayVerses);
     }
   });
 
@@ -344,42 +376,45 @@ function normalizeBiblicalBook(book) {
   return html;
 }
     // Returns true if a marker's biblical references pass the current biblical filter.
-    function markerPassesBibRefFilter(marker) {
-      const filters = getFilterSettings();
-      if (filters.bibRefFilterType === "none") return true;
-      const refs = marker.myData.biblicalReferences;
-      if (!refs) return false;
-      const refList = refs.split(",").map(r => r.trim()).filter(r => r);
-      if (filters.bibRefFilterType === "book") {
-        const selectedBook = normalizeBiblicalBook(filters.bibRefBook);
-        if (!selectedBook) return true;
-        if (!filters.bibRefChapter) {
-          return refList.some(ref => ref.toLowerCase().startsWith(selectedBook));
-        } else {
-          const selectedChapter = parseInt(filters.bibRefChapter);
-          return refList.some(ref => {
-            const match = ref.match(/^([\D]+)[\s:]+(\d+):/);
-            if (match) {
-              const book = normalizeBiblicalBook(match[1].trim());
-              const chapter = parseInt(match[2]);
-              return book === selectedBook && chapter === selectedChapter;
-            }
-            return false;
-          });
+    // Update marker filtering so that when the filter type is "book", it returns true if at least one reference
+// in the marker matches the selected book. If a chapter is provided, then it requires an exact chapter match.
+function markerPassesBibRefFilter(marker) {
+  const filters = getFilterSettings();
+  if (filters.bibRefFilterType === "none") return true;
+  const refs = marker.myData.biblicalReferences;
+  if (!refs) return false;
+  const refList = refs.split(",").map(r => r.trim()).filter(r => r);
+  if (filters.bibRefFilterType === "book") {
+    const selectedBook = normalizeBiblicalBook(filters.bibRefBook);
+    if (!selectedBook) return true;
+    if (!filters.bibRefChapter) {
+      // No chapter provided—match if any reference starts with the selected book.
+      return refList.some(ref => ref.toLowerCase().startsWith(selectedBook.toLowerCase()));
+    } else {
+      const selectedChapter = parseInt(filters.bibRefChapter);
+      return refList.some(ref => {
+        const match = ref.match(/^([\D]+)[\s:]+(\d+):/);
+        if (match) {
+          const book = normalizeBiblicalBook(match[1].trim());
+          const chapter = parseInt(match[2]);
+          return book === selectedBook && chapter === selectedChapter;
         }
-      } else if (filters.bibRefFilterType === "parsha") {
-        const selectedParsha = filters.bibRefParsha;
-        if (!selectedParsha || !parshaDataLoaded[selectedParsha]) return true;
-        const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
-        const range = parseRange(rangeStr);
-        if (!range) return false;
-        return refList.some(ref => {
-          const parsedRef = parseReference(ref);
-          return parsedRef && refInRange(parsedRef, range);
-        });
-      }
-      return true;
+        return false;
+      });
     }
+  } else if (filters.bibRefFilterType === "parsha") {
+    const selectedParsha = filters.bibRefParsha;
+    if (!selectedParsha || !parshaDataLoaded[selectedParsha]) return true;
+    const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
+    const range = parseRange(rangeStr);
+    if (!range) return false;
+    return refList.some(ref => {
+      const parsedRef = parseReference(ref);
+      return parsedRef && refInRange(parsedRef, range);
+    });
+  }
+  return true;
+}
 
     /*************************************
      * URL FILTER FUNCTIONS
