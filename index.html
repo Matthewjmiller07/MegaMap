@@ -261,14 +261,16 @@
       return "both";
     }
     // Normalize biblical book names (e.g. "jonahum" to "jonah").
-    function normalizeBiblicalBook(book) {
-      let b = book.toLowerCase();
-      // Add additional aliases as needed.
-      if (b === "jonahum") {
-        return "jonah";
-      }
-      return b;
-    }
+    // Normalizes biblical book names so that variations like "ii kings", "2 kings", or "2kings" are all returned as "II Kings" (and similarly for Samuel and Chronicles).
+function normalizeBiblicalBook(book) {
+  const b = book.trim().toLowerCase();
+  if (b === "jonahum") return "Jonah";
+  if (b === "ii kings" || b === "2 kings" || b === "2kings") return "II Kings";
+  if (b === "ii samuel" || b === "2 samuel" || b === "2samuel") return "II Samuel";
+  if (b === "ii chronicles" || b === "2 chronicles" || b === "2chronicles") return "II Chronicles";
+  // For all other books, return in Title Case.
+  return b.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
     // Parse a biblical reference (e.g., "Genesis 1:1") and normalize the book.
     function parseReference(ref) {
       const match = ref.match(/^([\D]+)[\s:]+(\d+):(\d+)/);
@@ -297,37 +299,50 @@
       return true;
     }
     function buildBiblicalPopupContent(refString) {
-      if (!refString) return "";
-      const refs = refString.split(",").map(r => r.trim()).filter(r => r);
-      const groups = { old: {}, new: {} };
-      const ntAbbr = new Set(["matt", "mark", "luke", "john", "acts", "rom", "1 cor", "2 cor", "gal", "eph", "phil", "col", "1 thess", "2 thess", "1 tim", "2 tim", "titus", "philem", "heb", "james", "1 pet", "2 pet", "1 john", "2 john", "3 john", "jude", "rev"]);
-      refs.forEach(ref => {
-        const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
-        if (match) {
-          let book = normalizeBiblicalBook(match[1].trim());
-          const verses = match[2].trim();
-          const testament = ntAbbr.has(book) ? "new" : "old";
-          if (!groups[testament][book]) { groups[testament][book] = []; }
-          groups[testament][book].push(verses);
-        }
-      });
-      let html = "";
-      if (Object.keys(groups.old).length > 0) {
-        html += "<div><h6>Old Testament</h6><ul>";
-        for (let book in groups.old) {
-          html += `<li><strong>${titleCase(book)}:</strong> ${groups.old[book].join(", ")}</li>`;
-        }
-        html += "</ul></div>";
+  if (!refString) return "";
+  const refs = refString.split(",").map(r => r.trim()).filter(r => r);
+  const groups = { old: {}, new: {} };
+  // Set of New Testament abbreviations (in lowercase)
+  const ntAbbr = new Set([
+    "matt", "mark", "luke", "john", "acts", "rom",
+    "1 cor", "2 cor", "gal", "eph", "phil", "col",
+    "1 thess", "2 thess", "1 tim", "2 tim", "titus",
+    "philem", "heb", "james", "1 pet", "2 pet",
+    "1 john", "2 john", "3 john", "jude", "rev"
+  ]);
+
+  refs.forEach(ref => {
+    const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
+    if (match) {
+      const rawBook = match[1].trim();
+      const normalizedBook = normalizeBiblicalBook(rawBook);
+      const verses = match[2].trim();
+      // Determine testament based on the normalized book.
+      const testament = ntAbbr.has(normalizedBook.toLowerCase()) ? "new" : "old";
+      if (!groups[testament][normalizedBook]) {
+        groups[testament][normalizedBook] = [];
       }
-      if (Object.keys(groups.new).length > 0) {
-        html += "<div><h6>New Testament</h6><ul>";
-        for (let book in groups.new) {
-          html += `<li><strong>${titleCase(book)}:</strong> ${groups.new[book].join(", ")}</li>`;
-        }
-        html += "</ul></div>";
-      }
-      return html;
+      groups[testament][normalizedBook].push(verses);
     }
+  });
+
+  let html = "";
+  if (Object.keys(groups.old).length > 0) {
+    html += "<div><h6>Old Testament</h6><ul>";
+    for (const book in groups.old) {
+      html += `<li><strong>${book}:</strong> ${groups.old[book].join(", ")}</li>`;
+    }
+    html += "</ul></div>";
+  }
+  if (Object.keys(groups.new).length > 0) {
+    html += "<div><h6>New Testament</h6><ul>";
+    for (const book in groups.new) {
+      html += `<li><strong>${book}:</strong> ${groups.new[book].join(", ")}</li>`;
+    }
+    html += "</ul></div>";
+  }
+  return html;
+}
     // Returns true if a marker's biblical references pass the current biblical filter.
     function markerPassesBibRefFilter(marker) {
       const filters = getFilterSettings();
