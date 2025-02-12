@@ -61,10 +61,10 @@
   <!-- Map container -->
   <div id="map"></div>
 
-  <!-- Desktop fixed filter panel (visible on large screens) -->
+  <!-- Desktop fixed filter panel -->
   <div id="filter-panel-fixed" class="d-none d-lg-block shadow">
     <h5>Filter Markers</h5>
-    <!-- Toggle controls – markers will not appear until toggled on -->
+    <!-- Toggle controls – markers will load only when toggled on -->
     <div class="mb-2 form-check">
       <input type="checkbox" id="toggleUSUK" class="form-check-input">
       <label for="toggleUSUK" class="form-check-label">Show US‑UK Cities</label>
@@ -82,7 +82,23 @@
         <option value="new">New Testament</option>
       </select>
     </div>
-    <!-- State filter panel (all states checked by default) -->
+    <!-- Biblical Reference Filter section -->
+    <div class="mb-2">
+      <strong>Biblical Reference Filter:</strong>
+      <select id="bibRefFilterType" class="form-select form-select-sm">
+        <option value="none" selected>None</option>
+        <option value="book">Book/Chapter</option>
+        <option value="parsha">Parsha</option>
+      </select>
+      <div id="bibRefBookChapter" style="display: none; margin-top: 5px;">
+        <select id="bibRefBook" class="form-select form-select-sm"></select>
+        <input type="number" id="bibRefChapter" class="form-control form-control-sm mt-1" placeholder="Chapter #" min="1">
+      </div>
+      <div id="bibRefParsha" style="display: none; margin-top: 5px;">
+        <select id="bibRefParshaSelect" class="form-select form-select-sm"></select>
+      </div>
+    </div>
+    <!-- US States filter panel -->
     <div class="mb-2">
       <strong>US States:</strong>
       <div id="us-states-filter"></div>
@@ -100,7 +116,7 @@
     </div>
   </div>
 
-  <!-- Mobile offcanvas filter panel (visible on small screens) -->
+  <!-- Mobile offcanvas filter panel -->
   <div class="offcanvas offcanvas-start d-lg-none" tabindex="-1" id="filterPanelOffcanvas" aria-labelledby="filterPanelOffcanvasLabel">
     <div class="offcanvas-header">
       <h5 class="offcanvas-title" id="filterPanelOffcanvasLabel">Filter Markers</h5>
@@ -124,6 +140,22 @@
           <option value="new">New Testament</option>
         </select>
       </div>
+      <!-- Biblical Reference Filter for Mobile -->
+      <div class="mb-2">
+        <strong>Biblical Reference Filter:</strong>
+        <select id="bibRefFilterType_mobile" class="form-select form-select-sm">
+          <option value="none" selected>None</option>
+          <option value="book">Book/Chapter</option>
+          <option value="parsha">Parsha</option>
+        </select>
+        <div id="bibRefBookChapter_mobile" style="display: none; margin-top: 5px;">
+          <select id="bibRefBook_mobile" class="form-select form-select-sm"></select>
+          <input type="number" id="bibRefChapter_mobile" class="form-control form-control-sm mt-1" placeholder="Chapter #" min="1">
+        </div>
+        <div id="bibRefParsha_mobile" style="display: none; margin-top: 5px;">
+          <select id="bibRefParshaSelect_mobile" class="form-select form-select-sm"></select>
+        </div>
+      </div>
       <div class="mb-2">
         <strong>US States:</strong>
         <div id="us-states-filter-mobile"></div>
@@ -145,78 +177,19 @@
     Filters
   </button>
 
-  <!-- Scripts -->
-  <!-- jQuery -->
+  <!-- External Libraries -->
   <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
-  <!-- Bootstrap Bundle JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- PapaParse -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-  <!-- Leaflet JS -->
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
-  <!-- Leaflet Awesome Markers JS -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
-  
+
+  <!-- Main Script -->
   <script>
-    /***********************
-     * UTILITY FUNCTIONS
-     ***********************/
-    function cleanPlaceName(name) {
-      let cleaned = name.split("/")[0].trim();
-      return cleaned.replace(/\s*\d+$/, "");
-    }
-    function getBaseGroup(name) {
-      if (!name) return "";
-      let cleaned = name.split("/")[0].trim().toLowerCase();
-      cleaned = cleaned.replace(/\s*\d+$/, "");
-      cleaned = cleaned.replace(/\(.*\)/, "").trim();
-      cleaned = cleaned.replace(/\bbeach\b/g, "").trim();
-      return cleaned;
-    }
-    function titleCase(str) {
-      return str.replace(/\w\S*/g, function(txt) {
-        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-      });
-    }
-    // Parse CSV coordinate strings; if swap is true, assume CSV order is long,lat and swap to [lat, lng].
-    function parseCoordinates(coordStr, swap = false) {
-      coordStr = coordStr.trim();
-      if (!coordStr) return [];
-      let pairs = coordStr.split(" ").filter(s => s.trim() !== "");
-      return pairs.map(pair => {
-        let coords = pair.split(",");
-        return swap ? [parseFloat(coords[1]), parseFloat(coords[0])] : [parseFloat(coords[0]), parseFloat(coords[1])];
-      });
-    }
-    function parseFirstCoordinate(coordStr, swap = false) {
-      let arr = parseCoordinates(coordStr, swap);
-      return (arr.length > 0) ? arr[0] : [0, 0];
-    }
-    // Normalize Testament values to "old", "new", or "both".
-    function normalizeTestament(testament) {
-      let t = testament.trim().toLowerCase();
-      if (t.indexOf("old") !== -1) return "old";
-      if (t.indexOf("new") !== -1) return "new";
-      return "both";
-    }
-    
-    /***********************
-     * GLOBAL VARIABLES & MAP INITIALIZATION
-     ***********************/
-    // Initialize the map without adding any markers.
-    let map = L.map('map').setView([39.50, -98.35], 4);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 18
-    }).addTo(map);
-    
-    // Create layer groups.
-    const usUkLayerGroup = L.layerGroup();
-    const oldBiblicalLayerGroup = L.layerGroup();
-    const newBiblicalLayerGroup = L.layerGroup();
-    const bothBiblicalLayerGroup = L.layerGroup();
-    
-    // Popup options – popups remain open until manually closed.
+  (function() {
+    /*************************************
+     * GLOBAL VARIABLES & POPUP OPTIONS
+     *************************************/
     const popupOptions = {
       maxWidth: 250,
       autoPan: true,
@@ -225,29 +198,177 @@
       closeOnClick: false,
       autoClose: false
     };
-    
-    /***********************
-     * GLOBAL ARRAYS & OBJECTS
-     ***********************/
-    let usUkMarkers = [];      // Array for US/UK markers
-    let usBiblicalMarkers = [];  // Array for US Biblical markers
+
+    const map = L.map('map').setView([39.50, -98.35], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(map);
+
+    // Layer groups.
+    const usUkLayerGroup = L.layerGroup();
+    const oldBiblicalLayerGroup = L.layerGroup();
+    const newBiblicalLayerGroup = L.layerGroup();
+    const bothBiblicalLayerGroup = L.layerGroup();
+
+    // Marker arrays and data objects.
+    let usUkMarkers = [];
+    let usBiblicalMarkers = [];
     let usUkLoaded = false;
     let usBiblicalLoaded = false;
-    let biblicalDataMap = {};    // keyed by groupKey for biblical data
+    let biblicalDataMap = {}; // keyed by groupKey
     let usStatesSet = new Set();
-    
-    /***********************
-     * ICON DEFINITIONS
-     ***********************/
-    let iconCityUS = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'blue', prefix: 'glyphicon' });
-    let iconCityUK = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'red', prefix: 'glyphicon' });
-    let iconUSBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'purple', prefix: 'glyphicon' });
-    let iconBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'green', prefix: 'glyphicon' });
-    let highlightIcon = L.AwesomeMarkers.icon({ icon: 'star', markerColor: 'orange', prefix: 'glyphicon' });
-    
-    /*****************************************************
+
+    // External JSON data for biblical books and parsha filtering.
+    let booksData = {};       
+    let parshaDataLoaded = {};  
+
+    // Icon definitions.
+    const iconCityUS = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'blue', prefix: 'glyphicon' });
+    const iconCityUK = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'red', prefix: 'glyphicon' });
+    const iconUSBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'purple', prefix: 'glyphicon' });
+    const iconBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'green', prefix: 'glyphicon' });
+    const highlightIcon = L.AwesomeMarkers.icon({ icon: 'star', markerColor: 'orange', prefix: 'glyphicon' });
+
+    /*************************************
+     * UTILITY FUNCTIONS
+     *************************************/
+    function getBaseGroup(name) {
+      if (!name) return "";
+      let cleaned = name.split("/")[0].trim().toLowerCase();
+      cleaned = cleaned.replace(/\s*\d+$/, "");
+      cleaned = cleaned.replace(/\(.*\)/, "").trim();
+      return cleaned;
+    }
+    function titleCase(str) {
+      return str.replace(/\w\S*/g, function(txt) {
+        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+      });
+    }
+    function parseCoordinates(coordStr, swap = false) {
+      coordStr = coordStr.trim();
+      if (!coordStr) return [];
+      const pairs = coordStr.split(" ").filter(s => s.trim() !== "");
+      return pairs.map(pair => {
+        const coords = pair.split(",");
+        return swap ? [parseFloat(coords[1]), parseFloat(coords[0])] : [parseFloat(coords[0]), parseFloat(coords[1])];
+      });
+    }
+    function normalizeTestament(testament) {
+      const t = testament.trim().toLowerCase();
+      if (t.indexOf("old") !== -1) return "old";
+      if (t.indexOf("new") !== -1) return "new";
+      return "both";
+    }
+    // Normalize biblical book names (e.g. "jonahum" to "jonah").
+    function normalizeBiblicalBook(book) {
+      let b = book.toLowerCase();
+      // Add additional aliases as needed.
+      if (b === "jonahum") {
+        return "jonah";
+      }
+      return b;
+    }
+    // Parse a biblical reference (e.g., "Genesis 1:1") and normalize the book.
+    function parseReference(ref) {
+      const match = ref.match(/^([\D]+)[\s:]+(\d+):(\d+)/);
+      if (!match) return null;
+      const book = normalizeBiblicalBook(match[1].trim());
+      return { book: book, chapter: parseInt(match[2]), verse: parseInt(match[3]) };
+    }
+    // Parse a reference range string (e.g., "Genesis 1:1-2:3").
+    function parseRange(rangeStr) {
+      const match = rangeStr.match(/^([\D]+)[\s]+(\d+):(\d+)-(\d+):(\d+)/);
+      if (!match) return null;
+      return {
+        book: match[1].trim(),
+        startChapter: parseInt(match[2]),
+        startVerse: parseInt(match[3]),
+        endChapter: parseInt(match[4]),
+        endVerse: parseInt(match[5])
+      };
+    }
+    function refInRange(ref, range) {
+      if (ref.book.toLowerCase() !== range.book.toLowerCase()) return false;
+      if (ref.chapter < range.startChapter) return false;
+      if (ref.chapter > range.endChapter) return false;
+      if (ref.chapter === range.startChapter && ref.verse < range.startVerse) return false;
+      if (ref.chapter === range.endChapter && ref.verse > range.endVerse) return false;
+      return true;
+    }
+    function buildBiblicalPopupContent(refString) {
+      if (!refString) return "";
+      const refs = refString.split(",").map(r => r.trim()).filter(r => r);
+      const groups = { old: {}, new: {} };
+      const ntAbbr = new Set(["matt", "mark", "luke", "john", "acts", "rom", "1 cor", "2 cor", "gal", "eph", "phil", "col", "1 thess", "2 thess", "1 tim", "2 tim", "titus", "philem", "heb", "james", "1 pet", "2 pet", "1 john", "2 john", "3 john", "jude", "rev"]);
+      refs.forEach(ref => {
+        const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
+        if (match) {
+          let book = normalizeBiblicalBook(match[1].trim());
+          const verses = match[2].trim();
+          const testament = ntAbbr.has(book) ? "new" : "old";
+          if (!groups[testament][book]) { groups[testament][book] = []; }
+          groups[testament][book].push(verses);
+        }
+      });
+      let html = "";
+      if (Object.keys(groups.old).length > 0) {
+        html += "<div><h6>Old Testament</h6><ul>";
+        for (let book in groups.old) {
+          html += `<li><strong>${titleCase(book)}:</strong> ${groups.old[book].join(", ")}</li>`;
+        }
+        html += "</ul></div>";
+      }
+      if (Object.keys(groups.new).length > 0) {
+        html += "<div><h6>New Testament</h6><ul>";
+        for (let book in groups.new) {
+          html += `<li><strong>${titleCase(book)}:</strong> ${groups.new[book].join(", ")}</li>`;
+        }
+        html += "</ul></div>";
+      }
+      return html;
+    }
+    // Returns true if a marker's biblical references pass the current biblical filter.
+    function markerPassesBibRefFilter(marker) {
+      const filters = getFilterSettings();
+      if (filters.bibRefFilterType === "none") return true;
+      const refs = marker.myData.biblicalReferences;
+      if (!refs) return false;
+      const refList = refs.split(",").map(r => r.trim()).filter(r => r);
+      if (filters.bibRefFilterType === "book") {
+        const selectedBook = normalizeBiblicalBook(filters.bibRefBook);
+        if (!selectedBook) return true;
+        if (!filters.bibRefChapter) {
+          return refList.some(ref => ref.toLowerCase().startsWith(selectedBook));
+        } else {
+          const selectedChapter = parseInt(filters.bibRefChapter);
+          return refList.some(ref => {
+            const match = ref.match(/^([\D]+)[\s:]+(\d+):/);
+            if (match) {
+              const book = normalizeBiblicalBook(match[1].trim());
+              const chapter = parseInt(match[2]);
+              return book === selectedBook && chapter === selectedChapter;
+            }
+            return false;
+          });
+        }
+      } else if (filters.bibRefFilterType === "parsha") {
+        const selectedParsha = filters.bibRefParsha;
+        if (!selectedParsha || !parshaDataLoaded[selectedParsha]) return true;
+        const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
+        const range = parseRange(rangeStr);
+        if (!range) return false;
+        return refList.some(ref => {
+          const parsedRef = parseReference(ref);
+          return parsedRef && refInRange(parsedRef, range);
+        });
+      }
+      return true;
+    }
+
+    /*************************************
      * URL FILTER FUNCTIONS
-     *****************************************************/
+     *************************************/
     function getInitialFiltersFromUrl() {
       const params = new URLSearchParams(window.location.search);
       return {
@@ -256,7 +377,11 @@
         states: params.get("states")
           ? params.get("states").split(",").map(s => s.trim().toLowerCase())
           : null,
-        testament: params.get("testament") ? normalizeTestament(params.get("testament")) : "both"
+        testament: params.get("testament") ? normalizeTestament(params.get("testament")) : "both",
+        bibRefFilterType: params.get("bibref") ? params.get("bibref") : "none",
+        bibRefBook: params.get("bibrefbook") ? params.get("bibrefbook") : "",
+        bibRefChapter: params.get("bibrefchapter") ? params.get("bibrefchapter") : "",
+        bibRefParsha: params.get("bibrefparsha") ? params.get("bibrefparsha") : ""
       };
     }
     function updateUrlWithFilters() {
@@ -265,35 +390,19 @@
       params.set("usuk", filters.toggleUSUK ? "1" : "0");
       params.set("usbiblical", filters.toggleUSBiblical ? "1" : "0");
       params.set("testament", filters.testament);
-      if (filters.selectedStates.length > 0) {
+      params.set("bibref", filters.bibRefFilterType);
+      if (filters.bibRefFilterType === "book") {
+        params.set("bibrefbook", filters.bibRefBook);
+        params.set("bibrefchapter", filters.bibRefChapter);
+      } else if (filters.bibRefFilterType === "parsha") {
+        params.set("bibrefparsha", filters.bibRefParsha);
+      }
+      if (filters.selectedStates && filters.selectedStates.length > 0) {
         params.set("states", filters.selectedStates.join(","));
       } else {
         params.delete("states");
       }
       history.replaceState(null, "", "?" + params.toString());
-    }
-    function applyFiltersFromUrl() {
-      const initialFilters = getInitialFiltersFromUrl();
-      console.log("Applying filters from URL:", initialFilters);
-      const toggleUSUKDesktop = document.getElementById("toggleUSUK");
-      const toggleUSBiblicalDesktop = document.getElementById("toggleUSBiblical");
-      if (toggleUSUKDesktop) toggleUSUKDesktop.checked = initialFilters.usuk;
-      if (toggleUSBiblicalDesktop) toggleUSBiblicalDesktop.checked = initialFilters.usbiblical;
-      const toggleUSUKMobile = document.getElementById("toggleUSUK_mobile");
-      const toggleUSBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
-      if (toggleUSUKMobile) toggleUSUKMobile.checked = initialFilters.usuk;
-      if (toggleUSBiblicalMobile) toggleUSBiblicalMobile.checked = initialFilters.usbiblical;
-      const testamentDesktop = document.getElementById("testamentFilter");
-      const testamentMobile = document.getElementById("testamentFilter_mobile");
-      if (testamentDesktop) testamentDesktop.value = initialFilters.testament;
-      if (testamentMobile) testamentMobile.value = initialFilters.testament;
-      if (initialFilters.states) {
-        const stateCheckboxesDesktop = document.querySelectorAll("#us-states-filter input[type=checkbox]");
-        stateCheckboxesDesktop.forEach(cb => { cb.checked = initialFilters.states.includes(cb.value.toLowerCase()); });
-        const stateCheckboxesMobile = document.querySelectorAll("#us-states-filter-mobile input[type=checkbox]");
-        stateCheckboxesMobile.forEach(cb => { cb.checked = initialFilters.states.includes(cb.value.toLowerCase()); });
-      }
-      updateMarkersVisibility();
     }
     function getFilterSettings() {
       const usUkDesktop = document.getElementById("toggleUSUK");
@@ -308,15 +417,55 @@
       const stateInputs = document.querySelectorAll("#us-states-filter input[type=checkbox], #us-states-filter-mobile input[type=checkbox]");
       let selectedStates = [];
       stateInputs.forEach(cb => { if (cb.checked) selectedStates.push(cb.value.trim().toLowerCase()); });
-      const settings = { toggleUSUK, toggleUSBiblical, selectedStates, testament: testamentFilter };
-      console.log("Current filter settings:", settings);
-      return settings;
+      const bibRefFilterType = document.getElementById("bibRefFilterType").value.toLowerCase();
+      const bibRefBook = document.getElementById("bibRefBook").value;
+      const bibRefChapter = document.getElementById("bibRefChapter").value;
+      const bibRefParsha = document.getElementById("bibRefParshaSelect").value;
+      return { toggleUSUK, toggleUSBiblical, selectedStates, testament: testamentFilter, bibRefFilterType, bibRefBook, bibRefChapter, bibRefParsha };
     }
-    
-    /*****************************************************
-     * LAZY CSV LOADING FUNCTIONS
-     *****************************************************/
-    // Load US‑UK Cities.
+    function applyFiltersFromUrl() {
+      const initial = getInitialFiltersFromUrl();
+      console.log("Applying filters from URL:", initial);
+      const toggleUSUKDesktop = document.getElementById("toggleUSUK");
+      const toggleUSBiblicalDesktop = document.getElementById("toggleUSBiblical");
+      if (toggleUSUKDesktop) toggleUSUKDesktop.checked = initial.usuk;
+      if (toggleUSBiblicalDesktop) toggleUSBiblicalDesktop.checked = initial.usbiblical;
+      const toggleUSUKMobile = document.getElementById("toggleUSUK_mobile");
+      const toggleUSBiblicalMobile = document.getElementById("toggleUSBiblical_mobile");
+      if (toggleUSUKMobile) toggleUSUKMobile.checked = initial.usuk;
+      if (toggleUSBiblicalMobile) toggleUSBiblicalMobile.checked = initial.usbiblical;
+      const testamentDesktop = document.getElementById("testamentFilter");
+      const testamentMobile = document.getElementById("testamentFilter_mobile");
+      if (testamentDesktop) testamentDesktop.value = initial.testament;
+      if (testamentMobile) testamentMobile.value = initial.testament;
+      if (initial.bibRefFilterType) {
+        document.getElementById("bibRefFilterType").value = initial.bibRefFilterType;
+        if (initial.bibRefFilterType === "book") {
+          document.getElementById("bibRefBookChapter").style.display = "block";
+          document.getElementById("bibRefParsha").style.display = "none";
+          document.getElementById("bibRefBook").value = initial.bibRefBook;
+          document.getElementById("bibRefChapter").value = initial.bibRefChapter;
+        } else if (initial.bibRefFilterType === "parsha") {
+          document.getElementById("bibRefParsha").style.display = "block";
+          document.getElementById("bibRefBookChapter").style.display = "none";
+          document.getElementById("bibRefParshaSelect").value = initial.bibRefParsha;
+        } else {
+          document.getElementById("bibRefBookChapter").style.display = "none";
+          document.getElementById("bibRefParsha").style.display = "none";
+        }
+      }
+      if (initial.states) {
+        const stateCheckboxesDesktop = document.querySelectorAll("#us-states-filter input[type=checkbox]");
+        stateCheckboxesDesktop.forEach(cb => { cb.checked = initial.states.includes(cb.value.toLowerCase()); });
+        const stateCheckboxesMobile = document.querySelectorAll("#us-states-filter-mobile input[type=checkbox]");
+        stateCheckboxesMobile.forEach(cb => { cb.checked = initial.states.includes(cb.value.toLowerCase()); });
+      }
+      updateMarkersVisibility();
+    }
+
+    /*************************************
+     * CSV LOADING FUNCTIONS
+     *************************************/
     function loadUsUkCities() {
       if (usUkLoaded) return;
       console.log("Loading US–UK Cities...");
@@ -327,20 +476,20 @@
         complete: function(results) {
           console.log("Loaded cities_with_both_coords.csv, rows:", results.data.length);
           results.data.forEach(function(row) {
-            let cityName = row["City"] ? row["City"].trim() : "";
+            const cityName = row["City"] ? row["City"].trim() : "";
             if (!cityName) return;
-            let displayLabel = titleCase(cityName);
-            let groupKey = getBaseGroup(cityName);
-            let country = (row["Country"] || "").toUpperCase();
-            let state = row["State"] ? titleCase(row["State"].trim()) : "";
+            const displayLabel = titleCase(cityName);
+            const groupKey = getBaseGroup(cityName);
+            const country = (row["Country"] || "").toUpperCase();
+            const state = row["State"] ? titleCase(row["State"].trim()) : "";
             if (country === "US" && state && state !== "N/A") {
               usStatesSet.add(state.toLowerCase());
             }
-            let lat = parseFloat(row["latitude"]);
-            let lng = parseFloat(row["longitude"]);
-            let label = displayLabel + (state ? " (" + state + ")" : "");
-            let iconToUse = (country === "US") ? iconCityUS : iconCityUK;
-            let marker = L.marker([lat, lng], { icon: iconToUse });
+            const lat = parseFloat(row["latitude"]);
+            const lng = parseFloat(row["longitude"]);
+            const label = displayLabel + (state ? " (" + state + ")" : "");
+            const iconToUse = (country === "US") ? iconCityUS : iconCityUK;
+            const marker = L.marker([lat, lng], { icon: iconToUse });
             marker.myData = { 
               type: "city", 
               label: label, 
@@ -366,7 +515,6 @@
       });
     }
     
-    // Load US Biblical Cities from processed_biblical_places_sorted.csv.
     function loadUsBiblicalCities() {
       if (usBiblicalLoaded) return;
       console.log("Loading US Biblical Cities...");
@@ -376,23 +524,22 @@
         complete: function(results) {
           console.log("Loaded processed_biblical_places_sorted.csv, rows:", results.data.length);
           results.data.forEach(function(row) {
-            let placeName = row["Place Name"] ? row["Place Name"].trim() : "";
+            const placeName = row["Place Name"] ? row["Place Name"].trim() : "";
             if (!placeName) return;
-            let displayLabel = titleCase(placeName);
-            let groupKey = getBaseGroup(placeName);
+            const displayLabel = titleCase(placeName);
+            const groupKey = getBaseGroup(placeName);
             if (!biblicalDataMap[groupKey]) {
-              let coordsStr = row["Coordinates"] ? row["Coordinates"].trim() : "";
-              // Remember: Biblical CSV coordinates are stored as long,lat.
-              let parsedCoords = parseCoordinates(coordsStr, true);
+              const coordsStr = row["Coordinates"] ? row["Coordinates"].trim() : "";
+              const parsedCoords = parseCoordinates(coordsStr, true);
               if (parsedCoords.length > 0) {
-                let point = (parsedCoords.length >= 3)
+                const point = (parsedCoords.length >= 3)
                   ? (function() {
-                      let sum = parsedCoords.reduce((acc, pair) => [acc[0] + pair[0], acc[1] + pair[1]], [0, 0]);
+                      const sum = parsedCoords.reduce((acc, pair) => [acc[0] + pair[0], acc[1] + pair[1]], [0, 0]);
                       return [sum[0] / parsedCoords.length, sum[1] / parsedCoords.length];
                     })()
                   : parsedCoords[0];
-                let biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
-                let testament = row["Testament"] ? row["Testament"].trim() : "Both";
+                const biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
+                const testament = row["Testament"] ? row["Testament"].trim() : "Both";
                 biblicalDataMap[groupKey] = { 
                   lat: point[0], 
                   lng: point[1], 
@@ -403,29 +550,28 @@
                 console.log("Stored biblical data for group:", groupKey, biblicalDataMap[groupKey]);
               }
             }
-            // Process the "US Matching Cities" column.
-            let usMatchesRaw = row["US Matching Cities"] ? row["US Matching Cities"].trim() : "";
-            let usMatches = usMatchesRaw.split(";").map(s => s.trim()).filter(s => s !== "");
+            const usMatchesRaw = row["US Matching Cities"] ? row["US Matching Cities"].trim() : "";
+            const usMatches = usMatchesRaw.split(";").map(s => s.trim()).filter(s => s);
             usMatches.forEach(function(matchStr) {
-              let parts = matchStr.split(":");
+              const parts = matchStr.split(":");
               if (parts.length < 2) return;
-              let matchLabel = parts[0].trim();
-              let stateMatch = matchLabel.match(/\(([^)]+)\)/);
-              let state = stateMatch ? titleCase(stateMatch[1].trim()) : "";
+              const matchLabel = parts[0].trim();
+              const stateMatch = matchLabel.match(/\(([^)]+)\)/);
+              const state = stateMatch ? titleCase(stateMatch[1].trim()) : "";
               if (!state || state.toUpperCase() === "N/A") {
                 console.log("Skipping US Biblical marker for label due to missing state:", matchLabel);
                 return;
               }
               usStatesSet.add(state.toLowerCase());
-              let coordPart = parts[1].trim();
-              let latlngArr = coordPart.split(",");
+              const coordPart = parts[1].trim();
+              const latlngArr = coordPart.split(",");
               if (latlngArr.length < 2) return;
-              let lat = parseFloat(latlngArr[0]);
-              let lng = parseFloat(latlngArr[1]);
-              let displayMatchLabel = titleCase(matchLabel);
-              let marker = L.marker([lat, lng], { icon: iconUSBiblical });
-              let biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
-              let testament = row["Testament"] ? row["Testament"].trim() : "Both";
+              const lat = parseFloat(latlngArr[0]);
+              const lng = parseFloat(latlngArr[1]);
+              const displayMatchLabel = titleCase(matchLabel);
+              const marker = L.marker([lat, lng], { icon: iconUSBiblical });
+              const biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
+              const testament = row["Testament"] ? row["Testament"].trim() : "Both";
               marker.myData = { 
                 type: "usBiblical", 
                 label: displayMatchLabel, 
@@ -455,143 +601,71 @@
         error: function(err) { console.error("Error loading processed_biblical_places_sorted.csv:", err); }
       });
     }
-    
-    /*****************************************************
-     * BIBLICAL REFERENCE POPUP BUILDER
-     *****************************************************/
-    // This function groups comma‐separated biblical references into Old and New Testament clusters.
-    function buildBiblicalPopupContent(refString) {
-      if (!refString) return "";
-      let refs = refString.split(",").map(r => r.trim()).filter(r => r);
-      let groups = { old: {}, new: {} };
-      // Define a set of New Testament abbreviations (in lower case).
-      let ntAbbr = new Set(["matt", "mark", "luke", "john", "acts", "rom", "1 cor", "2 cor", "gal", "eph", "phil", "col", "1 thess", "2 thess", "1 tim", "2 tim", "titus", "philem", "heb", "james", "1 pet", "2 pet", "1 john", "2 john", "3 john", "jude", "rev"]);
-      refs.forEach(ref => {
-        // Allow for either a space or a colon between the book and the chapter:verse.
-        let match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
-        if (match) {
-          let book = match[1].trim();
-          let verses = match[2].trim();
-          let normBook = book.toLowerCase();
-          let testament = ntAbbr.has(normBook) ? "new" : "old";
-          if (!groups[testament][book]) {
-            groups[testament][book] = [];
-          }
-          groups[testament][book].push(verses);
-        }
-      });
-      let html = "";
-      if (Object.keys(groups.old).length > 0) {
-        html += "<div><h6>Old Testament</h6><ul>";
-        for (let book in groups.old) {
-          html += "<li><strong>" + book + ":</strong> " + groups.old[book].join(", ") + "</li>";
-        }
-        html += "</ul></div>";
-      }
-      if (Object.keys(groups.new).length > 0) {
-        html += "<div><h6>New Testament</h6><ul>";
-        for (let book in groups.new) {
-          html += "<li><strong>" + book + ":</strong> " + groups.new[book].join(", ") + "</li>";
-        }
-        html += "</ul></div>";
-      }
-      return html;
-    }
-    
-    /*****************************************************
+
+    /*************************************
      * POPUP BUILDERS
-     *****************************************************/
-    // US‑UK marker popup.
+     *************************************/
     function showCityPopup(marker) {
       if (marker.isPopupOpen()) return;
-      let d = marker.myData;
-      let stateDisplay = (d.country === "US" && d.state && d.state.toUpperCase() !== "N/A") ? d.state : "";
-      let content = "<strong>" + d.displayLabel + "</strong><br>";
-      if (stateDisplay) { content += "State: " + stateDisplay + "<br>"; }
-      content += "Country: " + d.country + "<br>";
-      let similar = usUkMarkers.filter(m => m.myData.groupKey.indexOf(d.groupKey) !== -1);
+      const d = marker.myData;
+      const stateDisplay = (d.country === "US" && d.state && d.state.toUpperCase() !== "N/A") ? d.state : "";
+      let content = `<strong>${d.displayLabel}</strong><br>`;
+      if (stateDisplay) { content += `State: ${stateDisplay}<br>`; }
+      content += `Country: ${d.country}<br>`;
+      const similar = usUkMarkers.filter(m => m.myData.groupKey.indexOf(d.groupKey) !== -1);
       if (similar.length > 0) {
         content += "<u>Matching Cities:</u><br>";
-        let seen = new Set();
+        const seen = new Set();
         similar.forEach(m => {
-          let dd = m.myData;
-          // Skip duplicate entries.
-          let key = dd.displayLabel.trim().toLowerCase() + "|" + dd.country.trim().toLowerCase();
+          const dd = m.myData;
+          const key = dd.displayLabel.trim().toLowerCase() + "|" + dd.country.trim().toLowerCase();
           if (seen.has(key)) return;
           seen.add(key);
-          // For US markers: button text "Fly to [STATE]"; for UK markers: "Fly to [CITY], UK".
-          let btnText = (dd.country === "US" && dd.state)
-                        ? "Fly to " + dd.state
-                        : (dd.country === "UK")
-                          ? "Fly to " + dd.displayLabel + ", " + dd.country
-                          : "Fly to City (" + dd.country + ")";
-          content += dd.displayLabel + " (" + dd.country + ")<br>" +
-                     "<button class='btn btn-sm btn-secondary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.displayLabel.replace(/"/g, '\\\"') + "\", \"City-" + dd.country + "\")'>" + btnText + "</button><br>";
+          const btnText = (dd.country === "US" && dd.state)
+            ? `Fly to ${dd.state}`
+            : (dd.country === "UK")
+              ? `Fly to ${dd.displayLabel}, ${dd.country}`
+              : `Fly to City (${dd.country})`;
+          content += `${dd.displayLabel} (${dd.country})<br>`;
+          content += `<button class="btn btn-sm btn-secondary mt-1" onclick='flyToLocation(${dd.lat}, ${dd.lng}, "${dd.displayLabel.replace(/"/g, '\\\"')}", "City-${dd.country}")'>${btnText}</button><br>`;
         });
       }
       marker.off('click');
       marker.bindPopup(content, popupOptions).openPopup();
-      marker.on('popupclose', function() {
-        marker.on('click', function() {
-          if (!this.isPopupOpen()) { showCityPopup(this); }
-        });
-      });
-      if (typeof sefaria !== "undefined" && sefaria.link) {
-        sefaria.link({ dynamic: true });
-      }
     }
     
-    // US Biblical marker popup.
     function showBiblicalPopup(marker) {
       if (marker.isPopupOpen()) return;
-      let d = marker.myData;
-      let content = "<strong>" + d.label + "</strong><br>";
-      // Insert grouped biblical references.
+      const d = marker.myData;
+      let content = `<strong>${d.label}</strong><br>`;
       content += buildBiblicalPopupContent(d.biblicalReferences);
-      // Also list matching US Biblical cities (deduplicated).
-      let similar = usBiblicalMarkers.filter(m => m.myData.groupKey === d.groupKey && m.myData.state && m.myData.state.toUpperCase() !== "N/A");
+      const similar = usBiblicalMarkers.filter(m => m.myData.groupKey === d.groupKey && m.myData.state && m.myData.state.toUpperCase() !== "N/A");
       if (similar.length > 0) {
         content += "<div><u>US Matching Cities:</u><br>";
-        let seen = new Set();
+        const seen = new Set();
         similar.forEach(m => {
-          let dd = m.myData;
-          let key = dd.label.trim().toLowerCase() + "|" + dd.state.trim().toLowerCase();
+          const dd = m.myData;
+          const key = dd.label.trim().toLowerCase() + "|" + dd.state.trim().toLowerCase();
           if (seen.has(key)) return;
           seen.add(key);
-          content += dd.label + " (State: " + dd.state + ")<br>" +
-                     "<button class='btn btn-sm btn-primary mt-1' onclick='flyToLocation(" + dd.lat + ", " + dd.lng + ", \"" + dd.label.replace(/"/g, '\\\"') + "\", \"US Biblical\")'>Fly to US Biblical</button><br>";
+          content += `${dd.label} (State: ${dd.state})<br>`;
+          content += `<button class="btn btn-sm btn-primary mt-1" onclick='flyToLocation(${dd.lat}, ${dd.lng}, "${dd.label.replace(/"/g, '\\\"')}", "US Biblical")'>Fly to US Biblical</button><br>`;
         });
         content += "</div>";
       }
-      content += "<br><button class='btn btn-sm btn-success' onclick='flyToBiblicalPlace(\"" + d.groupKey + "\")'>Fly to Biblical Place</button>";
+      content += `<br><button class="btn btn-sm btn-success" onclick='flyToBiblicalPlace("${d.groupKey}")'>Fly to Biblical Place</button>`;
       marker.off('click');
       marker.bindPopup(content, popupOptions).openPopup();
-      marker.on('popupclose', function() {
-        marker.on('click', function() {
-          if (!this.isPopupOpen()) { showBiblicalPopup(this); }
-        });
-      });
-      if (typeof sefaria !== "undefined" && sefaria.link) {
-        sefaria.link({ dynamic: true });
-      }
     }
-    
-    function flyToCityView(groupKey) {
-      let marker = usUkMarkers.find(m => m.myData.groupKey === groupKey);
-      if (marker) {
-        map.flyTo(marker.getLatLng(), 10, { duration: 1.5 });
-        marker.openPopup();
-      } else {
-        alert("No US/UK city marker found for group: " + groupKey);
-      }
-    }
-    
-    // Fly to a marker: change its icon for 2 seconds, fly to it, then open its popup.
+
+    /*************************************
+     * FLY-TO FUNCTIONS
+     *************************************/
     function flyToLocation(lat, lng, name, type) {
-      let groupKey = getBaseGroup(name);
+      const groupKey = getBaseGroup(name);
       let foundMarker = null;
       if (type.startsWith("City-")) {
-        let desiredCountry = type.split("-")[1];
+        const desiredCountry = type.split("-")[1];
         foundMarker = usUkMarkers.find(m => m.myData.groupKey === groupKey && m.myData.country === desiredCountry);
         if (!foundMarker) {
           foundMarker = usUkMarkers.find(m => m.myData.groupKey.indexOf(groupKey) !== -1);
@@ -602,53 +676,25 @@
       if (foundMarker) {
         console.log("Fly-to found marker:", foundMarker.myData.label);
         foundMarker.myData.frozen = true;
-        let orig = foundMarker.options.icon;
+        const orig = foundMarker.options.icon;
         foundMarker.setIcon(highlightIcon);
         map.flyTo(foundMarker.getLatLng(), 10, { duration: 1.5 });
         setTimeout(() => {
           if (!foundMarker.isPopupOpen()) {
-            if (foundMarker.myData.type === 'city') {
-              showCityPopup(foundMarker);
-            } else {
-              showBiblicalPopup(foundMarker);
-            }
+            if (foundMarker.myData.type === 'city') { showCityPopup(foundMarker); }
+            else { showBiblicalPopup(foundMarker); }
             console.log("Fly-to popup opened for:", foundMarker.myData.label);
           }
           foundMarker.setIcon(orig);
           foundMarker.myData.frozen = false;
           updateMarkersVisibility();
         }, 2000);
-        foundMarker.on('popupclose', function() {
-          foundMarker.on('click', function() {
-            if (!this.isPopupOpen()) {
-              if (this.myData.type === 'city') {
-                showCityPopup(this);
-              } else {
-                showBiblicalPopup(this);
-              }
-            }
-          });
-        });
-        const popup = foundMarker.getPopup();
-        if (popup) {
-          popup.on('close', function() {
-            foundMarker.on('click', function() {
-              if (!this.isPopupOpen()) {
-                if (this.myData.type === 'city') {
-                  showCityPopup(this);
-                } else {
-                  showBiblicalPopup(this);
-                }
-              }
-            });
-          });
-        }
       } else {
         console.log("No marker found for fly-to, creating temporary marker for:", name);
-        let tempIcon = (type.startsWith("City-"))
+        const tempIcon = (type.startsWith("City-"))
           ? ((type.split("-")[1].trim().toLowerCase() === "uk") ? iconCityUK : iconCityUS)
           : (type === "US Biblical" ? iconUSBiblical : iconBiblical);
-        let tempMarker = L.marker([lat, lng], { icon: highlightIcon }).addTo(map);
+        const tempMarker = L.marker([lat, lng], { icon: highlightIcon }).addTo(map);
         tempMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey };
         map.flyTo([lat, lng], 10, { duration: 1.5 });
         setTimeout(() => {
@@ -662,12 +708,12 @@
     window.flyToLocation = flyToLocation;
     
     function flyToBiblicalPlace(groupKey) {
-      let bib = biblicalDataMap[groupKey];
+      const bib = biblicalDataMap[groupKey];
       if (bib) {
         let existing = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey && m.myData.type === "Biblical");
         if (!existing) {
-          let marker = L.marker([bib.lat, bib.lng], { icon: iconBiblical }).addTo(map);
-          let biblicalRefs = bib.biblicalReferences ? bib.biblicalReferences : "";
+          const marker = L.marker([bib.lat, bib.lng], { icon: iconBiblical }).addTo(map);
+          const biblicalRefs = bib.biblicalReferences || "";
           marker.myData = { type: "Biblical", label: titleCase(groupKey), biblicalReferences: biblicalRefs, lat: bib.lat, lng: bib.lng, groupKey: groupKey, frozen: true };
           marker.on('click', function() { showBiblicalPopup(this); });
           marker.on('popupclose', function() {
@@ -680,60 +726,50 @@
           console.log("Created new biblical marker for group:", groupKey);
         }
         if (bib.polygon) {
-          let poly = L.polygon(bib.polygon, { color: "green", weight: 3 }).addTo(map);
+          const poly = L.polygon(bib.polygon, { color: "green", weight: 3 }).addTo(map);
           setTimeout(() => { map.removeLayer(poly); }, 2000);
         }
         map.flyTo([bib.lat, bib.lng], 10, { duration: 1.5 });
-        setTimeout(() => {
-          existing.openPopup();
-          console.log("Biblical fly-to popup opened for:", existing.myData.label);
-        }, 2000);
+        setTimeout(() => { existing.openPopup(); console.log("Biblical fly-to popup opened for:", existing.myData.label); }, 2000);
       } else {
         alert("Biblical place data not found for group: " + groupKey);
       }
     }
-    
-    /*****************************************************
-     * UPDATE MARKERS BASED ON FILTERS
-     *****************************************************/
+    window.flyToBiblicalPlace = flyToBiblicalPlace;
+
+    /*************************************
+     * MARKER FILTERING & BUILDING
+     *************************************/
     function updateMarkersVisibility() {
       const filters = getFilterSettings();
-      
-      // Load markers if necessary.
       if (filters.toggleUSUK && !usUkLoaded) { loadUsUkCities(); }
       if (filters.toggleUSBiblical && !usBiblicalLoaded) { loadUsBiblicalCities(); }
       
-      // Clear layer groups.
       usUkLayerGroup.clearLayers();
       oldBiblicalLayerGroup.clearLayers();
       newBiblicalLayerGroup.clearLayers();
       bothBiblicalLayerGroup.clearLayers();
       
-      // Add US‑UK markers if the toggle is on.
       if (filters.toggleUSUK) {
         usUkMarkers.forEach(m => {
-          let d = m.myData;
-          if (d.country === "US" && filters.selectedStates.length > 0 && d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1) {
+          const d = m.myData;
+          if (d.country === "US" && filters.selectedStates && filters.selectedStates.length > 0 && d.state && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1) {
             return;
           }
           usUkLayerGroup.addLayer(m);
         });
       }
       
-      // Add US Biblical markers if the toggle is on and they pass state and Testament filters.
       if (filters.toggleUSBiblical) {
         usBiblicalMarkers.forEach(m => {
-          let d = m.myData;
-          if (d.state && filters.selectedStates.length > 0 && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1) return;
-          let markerTestament = normalizeTestament(d.testament || "Both");
+          const d = m.myData;
+          if (d.state && filters.selectedStates && filters.selectedStates.length > 0 && filters.selectedStates.indexOf(d.state.toLowerCase()) === -1) return;
+          const markerTestament = normalizeTestament(d.testament || "Both");
           if (filters.testament !== "both" && markerTestament !== filters.testament) return;
-          if (markerTestament === "old") {
-            oldBiblicalLayerGroup.addLayer(m);
-          } else if (markerTestament === "new") {
-            newBiblicalLayerGroup.addLayer(m);
-          } else {
-            bothBiblicalLayerGroup.addLayer(m);
-          }
+          if (!markerPassesBibRefFilter(m)) return;
+          if (markerTestament === "old") { oldBiblicalLayerGroup.addLayer(m); }
+          else if (markerTestament === "new") { newBiblicalLayerGroup.addLayer(m); }
+          else { bothBiblicalLayerGroup.addLayer(m); }
         });
       }
       
@@ -748,37 +784,35 @@
         map.removeLayer(bothBiblicalLayerGroup);
       }
     }
-    
-    /*****************************************************
-     * BUILD FILTER PANEL (state checkboxes default to checked)
-     *****************************************************/
+
+    /*************************************
+     * BUILD FILTER PANEL (States)
+     *************************************/
     function buildFilterPanel() {
       const initialFilters = getInitialFiltersFromUrl();
-      let container = document.getElementById("us-states-filter");
+      const container = document.getElementById("us-states-filter");
       container.innerHTML = "";
-      let states = Array.from(usStatesSet).sort();
+      const states = Array.from(usStatesSet).sort();
       console.log("Building desktop filter panel with states:", states);
       states.forEach(state => {
-        let checkboxId = "state-" + state.replace(/\s+/g, "_");
-        let checkbox = document.createElement("input");
+        const checkboxId = "state-" + state.replace(/\s+/g, "_");
+        const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.id = checkboxId;
         checkbox.value = state;
-        // Default: if no URL filter exists, check all.
         checkbox.checked = initialFilters.states ? initialFilters.states.includes(state.toLowerCase()) : true;
         checkbox.addEventListener("change", () => { updateUrlWithFilters(); updateMarkersVisibility(); });
         container.appendChild(checkbox);
-        let label = document.createElement("label");
+        const label = document.createElement("label");
         label.htmlFor = checkboxId;
         label.innerText = " " + titleCase(state);
         container.appendChild(label);
-        let onlyBtn = document.createElement("button");
+        const onlyBtn = document.createElement("button");
         onlyBtn.type = "button";
         onlyBtn.className = "btn btn-sm btn-link ms-1";
         onlyBtn.innerText = "Only";
         onlyBtn.addEventListener("click", function() {
-          let inputs = container.querySelectorAll("input[type=checkbox]");
-          inputs.forEach(inp => { inp.checked = false; });
+          container.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = false; });
           checkbox.checked = true;
           updateUrlWithFilters();
           updateMarkersVisibility();
@@ -787,13 +821,11 @@
         container.appendChild(document.createElement("br"));
       });
       document.getElementById("selectAllStates").addEventListener("click", function() {
-        let inputs = container.querySelectorAll("input[type=checkbox]");
-        inputs.forEach(inp => { inp.checked = true; });
+        container.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = true; });
         updateUrlWithFilters();
         updateMarkersVisibility();
       });
-      
-      let mobileContainer = document.getElementById("us-states-filter-mobile");
+      const mobileContainer = document.getElementById("us-states-filter-mobile");
       if (mobileContainer) {
         mobileContainer.innerHTML = container.innerHTML;
         mobileContainer.querySelectorAll("input[type=checkbox]").forEach(checkbox => {
@@ -806,18 +838,18 @@
         });
       }
     }
-    
-    /*****************************************************
-     * SET UP CITY SEARCH (desktop and mobile)
-     *****************************************************/
+
+    /*************************************
+     * SET UP CITY SEARCH
+     *************************************/
     function setupCitySearch() {
-      let searchInput = document.getElementById("citySearch");
-      let resultsList = document.getElementById("searchResults");
+      const searchInput = document.getElementById("citySearch");
+      const resultsList = document.getElementById("searchResults");
       searchInput.addEventListener("input", function() {
-        let query = this.value.toLowerCase().trim();
+        const query = this.value.toLowerCase().trim();
         resultsList.innerHTML = "";
         if (!query) { resultsList.style.display = "none"; return; }
-        let matches = new Set();
+        const matches = new Set();
         usUkMarkers.forEach(m => {
           if (m.myData.groupKey.indexOf(query) !== -1 || m.myData.label.toLowerCase().indexOf(query) !== -1) {
             matches.add(m.myData.groupKey);
@@ -828,14 +860,14 @@
             matches.add(m.myData.groupKey);
           }
         });
-        matches = Array.from(matches);
-        if (matches.length > 0) {
-          matches.slice(0, 20).forEach(match => {
-            let li = document.createElement("li");
+        const matchArr = Array.from(matches);
+        if (matchArr.length > 0) {
+          matchArr.slice(0, 20).forEach(match => {
+            const li = document.createElement("li");
             li.innerText = titleCase(match);
             li.onclick = function() {
-              let marker = usBiblicalMarkers.find(m => m.myData.groupKey === match) ||
-                           usUkMarkers.find(m => m.myData.groupKey === match);
+              const marker = usBiblicalMarkers.find(m => m.myData.groupKey === match) ||
+                             usUkMarkers.find(m => m.myData.groupKey === match);
               if (marker) {
                 map.flyTo(marker.getLatLng(), 10, { duration: 1.5 });
                 marker.openPopup();
@@ -851,14 +883,14 @@
         }
       });
       
-      let searchInputMobile = document.getElementById("citySearch_mobile");
-      let resultsListMobile = document.getElementById("searchResults_mobile");
+      const searchInputMobile = document.getElementById("citySearch_mobile");
+      const resultsListMobile = document.getElementById("searchResults_mobile");
       if (searchInputMobile) {
         searchInputMobile.addEventListener("input", function() {
-          let query = this.value.toLowerCase().trim();
+          const query = this.value.toLowerCase().trim();
           resultsListMobile.innerHTML = "";
           if (!query) { resultsListMobile.style.display = "none"; return; }
-          let matches = new Set();
+          const matches = new Set();
           usUkMarkers.forEach(m => {
             if (m.myData.groupKey.indexOf(query) !== -1 || m.myData.label.toLowerCase().indexOf(query) !== -1) {
               matches.add(m.myData.groupKey);
@@ -869,14 +901,14 @@
               matches.add(m.myData.groupKey);
             }
           });
-          matches = Array.from(matches);
-          if (matches.length > 0) {
-            matches.slice(0, 20).forEach(match => {
-              let li = document.createElement("li");
+          const matchArr = Array.from(matches);
+          if (matchArr.length > 0) {
+            matchArr.slice(0, 20).forEach(match => {
+              const li = document.createElement("li");
               li.innerText = titleCase(match);
               li.onclick = function() {
-                let marker = usBiblicalMarkers.find(m => m.myData.groupKey === match) ||
-                             usUkMarkers.find(m => m.myData.groupKey === match);
+                const marker = usBiblicalMarkers.find(m => m.myData.groupKey === match) ||
+                               usUkMarkers.find(m => m.myData.groupKey === match);
                 if (marker) {
                   map.flyTo(marker.getLatLng(), 10, { duration: 1.5 });
                   marker.openPopup();
@@ -893,9 +925,9 @@
         });
       }
     }
-    
+
     function zoomToAllMarkers() {
-      let bounds = L.latLngBounds([]);
+      const bounds = L.latLngBounds([]);
       usUkMarkers.forEach(m => { if (map.hasLayer(m)) bounds.extend(m.getLatLng()); });
       usBiblicalMarkers.forEach(m => { if (map.hasLayer(m)) bounds.extend(m.getLatLng()); });
       if (bounds.isValid()) { map.fitBounds(bounds); }
@@ -905,10 +937,10 @@
     if (document.getElementById("zoomAllBtn_mobile")) {
       document.getElementById("zoomAllBtn_mobile").addEventListener("click", zoomToAllMarkers);
     }
-    
-    /*****************************************************
+
+    /*************************************
      * EVENT LISTENERS FOR FILTER CONTROLS
-     *****************************************************/
+     *************************************/
     document.getElementById("toggleUSUK").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     document.getElementById("toggleUSBiblical").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     if (document.getElementById("toggleUSUK_mobile")) {
@@ -921,19 +953,124 @@
     if (document.getElementById("testamentFilter_mobile")) {
       document.getElementById("testamentFilter_mobile").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     }
-    
-    /*****************************************************
+    // Add listeners for the biblical reference dropdowns and input fields (desktop)
+    document.getElementById("bibRefFilterType").addEventListener("change", function() {
+      const value = this.value.toLowerCase();
+      if (value === "book") {
+        document.getElementById("bibRefBookChapter").style.display = "block";
+        document.getElementById("bibRefParsha").style.display = "none";
+      } else if (value === "parsha") {
+        document.getElementById("bibRefBookChapter").style.display = "none";
+        document.getElementById("bibRefParsha").style.display = "block";
+      } else {
+        document.getElementById("bibRefBookChapter").style.display = "none";
+        document.getElementById("bibRefParsha").style.display = "none";
+      }
+      updateUrlWithFilters();
+      updateMarkersVisibility();
+    });
+    document.getElementById("bibRefBook").addEventListener("change", function() {
+      updateUrlWithFilters();
+      updateMarkersVisibility();
+    });
+    document.getElementById("bibRefChapter").addEventListener("input", function() {
+      updateUrlWithFilters();
+      updateMarkersVisibility();
+    });
+    document.getElementById("bibRefParshaSelect").addEventListener("change", function() {
+      updateUrlWithFilters();
+      updateMarkersVisibility();
+    });
+    // And similarly for mobile:
+    if (document.getElementById("bibRefFilterType_mobile")) {
+      document.getElementById("bibRefFilterType_mobile").addEventListener("change", function() {
+        const value = this.value.toLowerCase();
+        if (value === "book") {
+          document.getElementById("bibRefBookChapter_mobile").style.display = "block";
+          document.getElementById("bibRefParsha_mobile").style.display = "none";
+        } else if (value === "parsha") {
+          document.getElementById("bibRefBookChapter_mobile").style.display = "none";
+          document.getElementById("bibRefParsha_mobile").style.display = "block";
+        } else {
+          document.getElementById("bibRefBookChapter_mobile").style.display = "none";
+          document.getElementById("bibRefParsha_mobile").style.display = "none";
+        }
+        updateUrlWithFilters();
+        updateMarkersVisibility();
+      });
+      document.getElementById("bibRefBook_mobile").addEventListener("change", function() {
+        updateUrlWithFilters();
+        updateMarkersVisibility();
+      });
+      document.getElementById("bibRefChapter_mobile").addEventListener("input", function() {
+        updateUrlWithFilters();
+        updateMarkersVisibility();
+      });
+      document.getElementById("bibRefParshaSelect_mobile").addEventListener("change", function() {
+        updateUrlWithFilters();
+        updateMarkersVisibility();
+      });
+    }
+
+    /*************************************
+     * EXTERNAL JSON: Load biblical books and parsha data
+     *************************************/
+    function populateBibRefBookDropdown() {
+      const select = document.getElementById("bibRefBook");
+      const selectMobile = document.getElementById("bibRefBook_mobile");
+      if (!select || !selectMobile) return;
+      select.innerHTML = "";
+      selectMobile.innerHTML = "";
+      Object.keys(booksData).forEach(bookName => {
+        const option = document.createElement("option");
+        option.value = bookName;
+        option.textContent = bookName;
+        select.appendChild(option);
+        const optionMobile = document.createElement("option");
+        optionMobile.value = bookName;
+        optionMobile.textContent = bookName;
+        selectMobile.appendChild(optionMobile);
+      });
+    }
+    function populateParshaDropdown() {
+      const select = document.getElementById("bibRefParshaSelect");
+      const selectMobile = document.getElementById("bibRefParshaSelect_mobile");
+      if (!select || !selectMobile) return;
+      select.innerHTML = "";
+      selectMobile.innerHTML = "";
+      Object.keys(parshaDataLoaded).forEach(parsha => {
+        const option = document.createElement("option");
+        option.value = parsha;
+        option.textContent = parsha;
+        select.appendChild(option);
+        const optionMobile = document.createElement("option");
+        optionMobile.value = parsha;
+        optionMobile.textContent = parsha;
+        selectMobile.appendChild(optionMobile);
+      });
+    }
+    fetch('books_parshas.json')
+      .then(response => response.json())
+      .then(data => {
+        booksData = data.books;
+        parshaDataLoaded = data.parshaData;
+        populateBibRefBookDropdown();
+        populateParshaDropdown();
+      })
+      .catch(error => console.error('Error loading books_parshas.json:', error));
+
+    /*************************************
      * INITIAL UI SETUP
-     *****************************************************/
+     *************************************/
     buildFilterPanel();
     setupCitySearch();
     document.addEventListener("DOMContentLoaded", applyFiltersFromUrl);
+  })();
   </script>
-  
-  <!-- Sefaria Linker Script (uses POST internally) -->
+
+  <!-- Optional Sefaria Linker Script -->
   <script type="text/javascript" charset="utf-8" src="https://www.sefaria.org/linker.v3.js"></script>
   <script>
-    // Initialize Sefaria Linker in popup-click mode with dynamic content.
     sefaria.link({ mode: "popup-click", dynamic: true });
   </script>
 </body>
