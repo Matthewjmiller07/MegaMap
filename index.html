@@ -305,7 +305,8 @@ function buildBiblicalPopupContent(refString) {
   if (!refString) return "";
   const refs = refString.split(",").map(r => r.trim()).filter(r => r);
   const groups = { old: {}, new: {} };
-  // New Testament abbreviations (in lowercase)
+
+  // Set of New Testament abbreviations (in lowercase)
   const ntAbbr = new Set([
     "matt", "mark", "luke", "john", "acts", "rom",
     "1 cor", "2 cor", "gal", "eph", "phil", "col",
@@ -316,13 +317,18 @@ function buildBiblicalPopupContent(refString) {
 
   // Get the current biblical filter settings
   const filters = getFilterSettings();
-  const selectedBook = (filters.bibRefFilterType === "book" && filters.bibRefBook)
-                         ? normalizeBiblicalBook(filters.bibRefBook)
-                         : null;
-  // If a chapter is provided, parse it; otherwise, null means whole-book match.
-  const selectedChapter = (filters.bibRefFilterType === "book" && filters.bibRefChapter)
-                           ? parseInt(filters.bibRefChapter)
-                           : null;
+  const filterType = filters.bibRefFilterType;
+  let selectedBook = null, selectedChapter = null, selectedParsha = null, parshaRange = null;
+  if (filterType === "book" && filters.bibRefBook) {
+    selectedBook = normalizeBiblicalBook(filters.bibRefBook);
+    if (filters.bibRefChapter) {
+      selectedChapter = parseInt(filters.bibRefChapter);
+    }
+  } else if (filterType === "parsha" && filters.bibRefParsha && parshaDataLoaded[filters.bibRefParsha]) {
+    selectedParsha = filters.bibRefParsha;
+    const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
+    parshaRange = parseRange(rangeStr);
+  }
 
   refs.forEach(ref => {
     const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
@@ -331,26 +337,29 @@ function buildBiblicalPopupContent(refString) {
       const normalizedBook = normalizeBiblicalBook(rawBook);
       const verses = match[2].trim();
       const testament = ntAbbr.has(normalizedBook.toLowerCase()) ? "new" : "old";
-      
+
       // Determine if this reference should be highlighted.
       let highlight = false;
-      if (selectedBook && normalizedBook === selectedBook) {
+      if (filterType === "book" && selectedBook && normalizedBook === selectedBook) {
         if (selectedChapter) {
-          // If chapter provided, highlight only if the chapter matches.
+          // If a chapter is provided, highlight only if the chapter matches.
           const chapMatch = ref.match(/^([\D]+)[\s:]+(\d+):/);
-          if (chapMatch) {
-            const chapter = parseInt(chapMatch[2]);
-            if (chapter === selectedChapter) {
-              highlight = true;
-            }
+          if (chapMatch && parseInt(chapMatch[2]) === selectedChapter) {
+            highlight = true;
           }
         } else {
           // No chapter provided—highlight all references from the selected book.
           highlight = true;
         }
+      } else if (filterType === "parsha" && parshaRange) {
+        // For parsha filtering, highlight if the reference falls within the parsha range.
+        const parsedRef = parseReference(ref);
+        if (parsedRef && refInRange(parsedRef, parshaRange)) {
+          highlight = true;
+        }
       }
+
       const displayVerses = highlight ? `<span style="background:yellow">${verses}</span>` : verses;
-      
       if (!groups[testament][normalizedBook]) {
         groups[testament][normalizedBook] = [];
       }
@@ -384,11 +393,12 @@ function markerPassesBibRefFilter(marker) {
   const refs = marker.myData.biblicalReferences;
   if (!refs) return false;
   const refList = refs.split(",").map(r => r.trim()).filter(r => r);
+  
   if (filters.bibRefFilterType === "book") {
     const selectedBook = normalizeBiblicalBook(filters.bibRefBook);
     if (!selectedBook) return true;
     if (!filters.bibRefChapter) {
-      // No chapter provided—match if any reference starts with the selected book.
+      // No chapter provided—pass if any reference starts with the selected book.
       return refList.some(ref => ref.toLowerCase().startsWith(selectedBook.toLowerCase()));
     } else {
       const selectedChapter = parseInt(filters.bibRefChapter);
