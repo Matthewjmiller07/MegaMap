@@ -209,6 +209,9 @@
         <div class="modal-body" id="bibGroupModalBody">
           <!-- Group details will be inserted here -->
         </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
       </div>
     </div>
   </div>
@@ -268,6 +271,9 @@
 
     // Global variable for biblical groups (for summary view)
     let currentBibGroups = {};
+
+    // Global variable to track the currently open popup
+    let currentOpenPopup = null;
 
     /*************************************
      * UTILITY FUNCTIONS
@@ -587,6 +593,8 @@
               frozen: false 
             };
             marker.on('click', function() {
+              // Auto-close any open popup
+              if (currentOpenPopup) { currentOpenPopup.remove(); }
               if (!this.isPopupOpen()) { showCityPopup(this); }
             });
             usUkMarkers.push(marker);
@@ -672,6 +680,8 @@
                 frozen: false 
               };
               marker.on('click', function() {
+                // Auto-close any open popup
+                if (currentOpenPopup) { currentOpenPopup.remove(); }
                 if (!this.isPopupOpen()) { showBiblicalPopup(this); }
               });
               marker.on('popupclose', function() {
@@ -694,6 +704,8 @@
      * POPUP BUILDERS
      *************************************/
     function showCityPopup(marker) {
+      // Auto-close any open popup
+      if (currentOpenPopup) { currentOpenPopup.remove(); }
       if (marker.isPopupOpen()) return;
       const d = marker.myData;
       const stateDisplay = (d.country === "US" && d.state && d.state.toUpperCase() !== "N/A") ? d.state : "";
@@ -720,9 +732,12 @@
       }
       marker.off('click');
       marker.bindPopup(content, popupOptions).openPopup();
+      currentOpenPopup = marker.getPopup();
     }
     
     function showBiblicalPopup(marker) {
+      // Auto-close any open popup
+      if (currentOpenPopup) { currentOpenPopup.remove(); }
       if (marker.isPopupOpen()) return;
       const d = marker.myData;
       let content = `<strong>${d.label}</strong><br>`;
@@ -744,6 +759,7 @@
       content += `<br><button class="btn btn-sm btn-success" onclick='flyToBiblicalPlace("${d.groupKey}")'>Fly to Biblical Place</button>`;
       marker.off('click');
       marker.bindPopup(content, popupOptions).openPopup();
+      currentOpenPopup = marker.getPopup();
     }
 
     /*************************************
@@ -842,7 +858,7 @@
      *************************************/
     function updateBiblicalPlacesSummary() {
       const filters = getFilterSettings();
-      // Filter US Biblical markers by biblical filter and state filter.
+      // Filter US Biblical markers by both biblical and state filters.
       const filteredMarkers = usBiblicalMarkers.filter(m => {
         const passesBib = markerPassesBibRefFilter(m);
         const passesState = (!filters.selectedStates ||
@@ -870,12 +886,12 @@
         bibName = "all";
       }
       
-      // Get unique selected states from the filter.
+      // Get unique selected states.
       let selectedStatesArr = [];
       if (filters.selectedStates && filters.selectedStates.length > 0) {
         selectedStatesArr = [...new Set(filters.selectedStates.map(s => titleCase(s)))];
       }
-      // If none are selected OR if all states are selected (by comparing to usStatesSet), then omit state list.
+      // If no states or all states are selected, omit state names.
       let summaryTitle = "";
       if (selectedStatesArr.length === 0 || selectedStatesArr.length === usStatesSet.size) {
         summaryTitle = "Biblical Places Names from " + bibName;
