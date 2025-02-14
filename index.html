@@ -763,7 +763,7 @@
     }
 
     /*************************************
-     * FLY-TO FUNCTIONS
+     * FLY-TO FUNCTIONS (with state filter update)
      *************************************/
     function flyToLocation(lat, lng, name, type) {
       const groupKey = getBaseGroup(name);
@@ -777,37 +777,122 @@
       } else if (type === "US Biblical") {
         foundMarker = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey);
       }
+      
       if (foundMarker) {
-        console.log("Fly-to found marker:", foundMarker.myData.label);
-        foundMarker.myData.frozen = true;
-        const orig = foundMarker.options.icon;
-        foundMarker.setIcon(highlightIcon);
-        map.flyTo(foundMarker.getLatLng(), 10, { duration: 1.5 });
-        setTimeout(() => {
-          if (!foundMarker.isPopupOpen()) {
-            if (foundMarker.myData.type === 'city') { showCityPopup(foundMarker); }
-            else { showBiblicalPopup(foundMarker); }
-            console.log("Fly-to popup opened for:", foundMarker.myData.label);
+        const filters = getFilterSettings();
+        const markerState = foundMarker.myData.state ? foundMarker.myData.state.toLowerCase() : "";
+        if (markerState && (!filters.selectedStates || filters.selectedStates.indexOf(markerState) === -1)) {
+          console.log("FlyTo: Marker state", markerState, "is not in active filters. Enabling it.");
+          const desktopCheckbox = document.getElementById("state-desktop-" + markerState);
+          const mobileCheckbox = document.getElementById("state-mobile-" + markerState);
+          if (desktopCheckbox) {
+            desktopCheckbox.checked = true;
+            console.log("Enabled desktop checkbox for state:", markerState);
           }
-          foundMarker.setIcon(orig);
-          foundMarker.myData.frozen = false;
-          updateMarkersVisibility();
-        }, 2000);
+          if (mobileCheckbox) {
+            mobileCheckbox.checked = true;
+            console.log("Enabled mobile checkbox for state:", markerState);
+          }
+          updateUrlWithFilters();
+          setTimeout(() => {
+            console.log("Updating markers after enabling state filter for:", markerState);
+            updateMarkersVisibility();
+            // Try to find the marker again now that the state is enabled.
+            if (type.startsWith("City-")) {
+              const desiredCountry = type.split("-")[1];
+              foundMarker = usUkMarkers.find(m => m.myData.groupKey === groupKey && m.myData.country === desiredCountry);
+              if (!foundMarker) {
+                foundMarker = usUkMarkers.find(m => m.myData.groupKey.indexOf(groupKey) !== -1);
+              }
+            } else if (type === "US Biblical") {
+              foundMarker = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey);
+            }
+            if (foundMarker) {
+              proceedFlyTo(foundMarker);
+            } else {
+              console.log("No marker found even after updating state filter, creating temporary marker for:", name);
+              createTempMarker(lat, lng, name, type, groupKey);
+            }
+          }, 100);
+        } else {
+          proceedFlyTo(foundMarker);
+        }
       } else {
-        console.log("No marker found for fly-to, creating temporary marker for:", name);
-        const tempIcon = (type.startsWith("City-"))
-          ? ((type.split("-")[1].trim().toLowerCase() === "uk") ? iconCityUK : iconCityUS)
-          : (type === "US Biblical" ? iconUSBiblical : iconBiblical);
-        const tempMarker = L.marker([lat, lng], { icon: highlightIcon }).addTo(map);
-        tempMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey };
-        map.flyTo([lat, lng], 10, { duration: 1.5 });
-        setTimeout(() => {
-          tempMarker.openPopup();
-          console.log("Temporary marker popup opened for:", name);
-          map.removeLayer(tempMarker);
-        }, 2000);
+        // No marker found: try to extract state from name and update filter
+        console.log("No marker found for fly-to, attempting to extract state from name:", name);
+        const stateMatch = name.match(/\(([^)]+)\)/);
+        if (stateMatch) {
+          const extractedState = stateMatch[1].trim().toLowerCase();
+          console.log("Extracted state:", extractedState);
+          const desktopCheckbox = document.getElementById("state-desktop-" + extractedState);
+          const mobileCheckbox = document.getElementById("state-mobile-" + extractedState);
+          if (desktopCheckbox) {
+            desktopCheckbox.checked = true;
+            console.log("Enabled desktop checkbox for state:", extractedState);
+          }
+          if (mobileCheckbox) {
+            mobileCheckbox.checked = true;
+            console.log("Enabled mobile checkbox for state:", extractedState);
+          }
+          updateUrlWithFilters();
+          setTimeout(() => {
+            console.log("Updating markers after enabling state filter for extracted state:", extractedState);
+            updateMarkersVisibility();
+            // Try to find marker again.
+            if (type.startsWith("City-")) {
+              const desiredCountry = type.split("-")[1];
+              foundMarker = usUkMarkers.find(m => m.myData.groupKey === groupKey && m.myData.country === desiredCountry);
+              if (!foundMarker) {
+                foundMarker = usUkMarkers.find(m => m.myData.groupKey.indexOf(groupKey) !== -1);
+              }
+            } else if (type === "US Biblical") {
+              foundMarker = usBiblicalMarkers.find(m => m.myData.groupKey === groupKey);
+            }
+            if (foundMarker) {
+              proceedFlyTo(foundMarker);
+            } else {
+              console.log("No marker found even after state update, creating temporary marker for:", name);
+              createTempMarker(lat, lng, name, type, groupKey);
+            }
+          }, 100);
+        } else {
+          console.log("Could not extract state from name. Creating temporary marker for:", name);
+          createTempMarker(lat, lng, name, type, groupKey);
+        }
       }
       console.log("Flying to " + name + " (" + type + ") with groupKey: " + groupKey + " at " + lat + ", " + lng);
+    }
+    // Helper function to perform the fly-to for a found marker.
+    function proceedFlyTo(foundMarker) {
+      console.log("Proceeding with fly-to for marker:", foundMarker.myData.label);
+      foundMarker.myData.frozen = true;
+      const orig = foundMarker.options.icon;
+      foundMarker.setIcon(highlightIcon);
+      map.flyTo(foundMarker.getLatLng(), 10, { duration: 1.5 });
+      setTimeout(() => {
+        if (!foundMarker.isPopupOpen()) {
+          if (foundMarker.myData.type === 'city') { showCityPopup(foundMarker); }
+          else { showBiblicalPopup(foundMarker); }
+          console.log("Fly-to popup opened for:", foundMarker.myData.label);
+        }
+        foundMarker.setIcon(orig);
+        foundMarker.myData.frozen = false;
+        updateMarkersVisibility();
+      }, 2000);
+    }
+    // Helper to create a temporary marker
+    function createTempMarker(lat, lng, name, type, groupKey) {
+      const tempIcon = (type.startsWith("City-"))
+          ? ((type.split("-")[1].trim().toLowerCase() === "uk") ? iconCityUK : iconCityUS)
+          : (type === "US Biblical" ? iconUSBiblical : iconBiblical);
+      const tempMarker = L.marker([lat, lng], { icon: highlightIcon }).addTo(map);
+      tempMarker.myData = { type: type, label: name, lat: lat, lng: lng, groupKey: groupKey };
+      map.flyTo([lat, lng], 10, { duration: 1.5 });
+      setTimeout(() => {
+        tempMarker.openPopup();
+        console.log("Temporary marker popup opened for:", name);
+        map.removeLayer(tempMarker);
+      }, 2000);
     }
     window.flyToLocation = flyToLocation;
     
