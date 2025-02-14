@@ -75,7 +75,7 @@
   <!-- Desktop fixed filter panel -->
   <div id="filter-panel-fixed" class="d-none d-lg-block shadow">
     <h5>Filter Markers</h5>
-    <!-- Toggle controls – markers will load only when toggled on -->
+    <!-- Toggle controls -->
     <div class="mb-2 form-check">
       <input type="checkbox" id="toggleUSUK" class="form-check-input">
       <label for="toggleUSUK" class="form-check-label">Show US‑UK Cities</label>
@@ -84,7 +84,7 @@
       <input type="checkbox" id="toggleUSBiblical" class="form-check-input">
       <label for="toggleUSBiblical" class="form-check-label">Show US Biblical Cities</label>
     </div>
-    <!-- Testament filter control -->
+    <!-- Testament filter -->
     <div class="mb-2">
       <strong>Testament:</strong>
       <select id="testamentFilter" class="form-select form-select-sm">
@@ -93,7 +93,7 @@
         <option value="new">New Testament</option>
       </select>
     </div>
-    <!-- Biblical Reference Filter section -->
+    <!-- Biblical Reference Filter -->
     <div class="mb-2">
       <strong>Biblical Reference Filter:</strong>
       <select id="bibRefFilterType" class="form-select form-select-sm">
@@ -109,7 +109,7 @@
         <select id="bibRefParshaSelect" class="form-select form-select-sm"></select>
       </div>
     </div>
-    <!-- US States filter panel -->
+    <!-- US States filter -->
     <div class="mb-2">
       <strong>US States:</strong>
       <div id="us-states-filter"></div>
@@ -124,6 +124,11 @@
       <label for="citySearch" class="form-label">Search (by group):</label>
       <input type="text" id="citySearch" class="form-control form-control-sm" placeholder="Type to search...">
       <ul id="searchResults"></ul>
+    </div>
+    <!-- Biblical Places Summary (Desktop) -->
+    <div id="bibPlacesSummary" class="mt-3">
+      <h6 id="bibSummaryTitle"></h6>
+      <div id="bibPlacesList"></div>
     </div>
   </div>
 
@@ -151,7 +156,7 @@
           <option value="new">New Testament</option>
         </select>
       </div>
-      <!-- Biblical Reference Filter for Mobile -->
+      <!-- Biblical Reference Filter (Mobile) -->
       <div class="mb-2">
         <strong>Biblical Reference Filter:</strong>
         <select id="bibRefFilterType_mobile" class="form-select form-select-sm">
@@ -180,6 +185,11 @@
         <input type="text" id="citySearch_mobile" class="form-control form-control-sm" placeholder="Type to search...">
         <ul id="searchResults_mobile"></ul>
       </div>
+      <!-- Biblical Places Summary (Mobile) -->
+      <div id="bibPlacesSummary_mobile" class="mt-3">
+        <h6 id="bibSummaryTitle_mobile"></h6>
+        <div id="bibPlacesList_mobile"></div>
+      </div>
     </div>
   </div>
 
@@ -187,6 +197,21 @@
   <button class="btn btn-primary d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#filterPanelOffcanvas" aria-controls="filterPanelOffcanvas" style="position: absolute; top: 10px; right: 10px; z-index: 1200;">
     Filters
   </button>
+
+  <!-- Biblical Group Details Modal -->
+  <div class="modal fade" id="bibGroupModal" tabindex="-1" aria-labelledby="bibGroupModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="bibGroupModalLabel">Biblical Group Details</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="bibGroupModalBody">
+          <!-- Group details will be inserted here -->
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- External Libraries -->
   <script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
@@ -227,12 +252,12 @@
     let usBiblicalMarkers = [];
     let usUkLoaded = false;
     let usBiblicalLoaded = false;
-    let biblicalDataMap = {}; // keyed by groupKey
+    let biblicalDataMap = {};
     let usStatesSet = new Set();
 
     // External JSON data for biblical books and parsha filtering.
-    let booksData = {};       
-    let parshaDataLoaded = {};  
+    let booksData = {};
+    let parshaDataLoaded = {};
 
     // Icon definitions.
     const iconCityUS = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'blue', prefix: 'glyphicon' });
@@ -240,6 +265,9 @@
     const iconUSBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'purple', prefix: 'glyphicon' });
     const iconBiblical = L.AwesomeMarkers.icon({ icon: 'info-sign', markerColor: 'green', prefix: 'glyphicon' });
     const highlightIcon = L.AwesomeMarkers.icon({ icon: 'star', markerColor: 'orange', prefix: 'glyphicon' });
+
+    // Global variable for biblical groups (for summary view)
+    let currentBibGroups = {};
 
     /*************************************
      * UTILITY FUNCTIONS
@@ -493,18 +521,28 @@
       if (testamentMobile) testamentMobile.value = initial.testament;
       if (initial.bibRefFilterType) {
         document.getElementById("bibRefFilterType").value = initial.bibRefFilterType;
+        document.getElementById("bibRefFilterType_mobile").value = initial.bibRefFilterType;
         if (initial.bibRefFilterType === "book") {
           document.getElementById("bibRefBookChapter").style.display = "block";
+          document.getElementById("bibRefBookChapter_mobile").style.display = "block";
           document.getElementById("bibRefParsha").style.display = "none";
+          document.getElementById("bibRefParsha_mobile").style.display = "none";
           document.getElementById("bibRefBook").value = initial.bibRefBook;
+          document.getElementById("bibRefBook_mobile").value = initial.bibRefBook;
           document.getElementById("bibRefChapter").value = initial.bibRefChapter;
+          document.getElementById("bibRefChapter_mobile").value = initial.bibRefChapter;
         } else if (initial.bibRefFilterType === "parsha") {
           document.getElementById("bibRefParsha").style.display = "block";
+          document.getElementById("bibRefParsha_mobile").style.display = "block";
           document.getElementById("bibRefBookChapter").style.display = "none";
+          document.getElementById("bibRefBookChapter_mobile").style.display = "none";
           document.getElementById("bibRefParshaSelect").value = initial.bibRefParsha;
+          document.getElementById("bibRefParshaSelect_mobile").value = initial.bibRefParsha;
         } else {
           document.getElementById("bibRefBookChapter").style.display = "none";
           document.getElementById("bibRefParsha").style.display = "none";
+          document.getElementById("bibRefBookChapter_mobile").style.display = "none";
+          document.getElementById("bibRefParsha_mobile").style.display = "none";
         }
       }
       updateMarkersVisibility();
@@ -575,6 +613,7 @@
             if (!placeName) return;
             const displayLabel = titleCase(placeName);
             const groupKey = getBaseGroup(placeName);
+            // Save the original Place Name for grouping in marker.myData.placeName.
             if (!biblicalDataMap[groupKey]) {
               const coordsStr = row["Coordinates"] ? row["Coordinates"].trim() : "";
               const parsedCoords = parseCoordinates(coordsStr, true);
@@ -619,6 +658,7 @@
               const marker = L.marker([lat, lng], { icon: iconUSBiblical });
               const biblicalReferences = row["Sorted Biblical References"] ? row["Sorted Biblical References"].trim() : "";
               const testament = row["Testament"] ? row["Testament"].trim() : "Both";
+              // Save the original Place Name from CSV into marker.myData.placeName.
               marker.myData = { 
                 type: "usBiblical", 
                 label: displayMatchLabel, 
@@ -626,6 +666,7 @@
                 lat: lat, 
                 lng: lng, 
                 groupKey: groupKey, 
+                placeName: displayLabel,
                 biblicalReferences: biblicalReferences,
                 testament: testament,
                 frozen: false 
@@ -785,6 +826,112 @@
     window.flyToBiblicalPlace = flyToBiblicalPlace;
 
     /*************************************
+     * HELPER: Format State List
+     *************************************/
+    function formatStateList(states) {
+      if (states.length === 0) return "";
+      if (states.length === 1) return states[0];
+      if (states.length === 2) return states[0] + " and " + states[1];
+      const allButLast = states.slice(0, states.length - 1).join(", ");
+      const last = states[states.length - 1];
+      return allButLast + ", and " + last;
+    }
+
+    /*************************************
+     * BIBLICAL PLACES SUMMARY FUNCTIONS
+     *************************************/
+    function updateBiblicalPlacesSummary() {
+      const filters = getFilterSettings();
+      // Filter US Biblical markers by biblical filter and state filter.
+      const filteredMarkers = usBiblicalMarkers.filter(m => {
+        const passesBib = markerPassesBibRefFilter(m);
+        const passesState = (!filters.selectedStates ||
+          filters.selectedStates.length === 0 ||
+          (m.myData.state && filters.selectedStates.indexOf(m.myData.state.toLowerCase()) > -1));
+        return passesBib && passesState;
+      });
+      
+      // Group markers by original Place Name (from CSV) or fallback to groupKey.
+      let groups = {};
+      filteredMarkers.forEach(m => {
+        let key = m.myData.placeName ? m.myData.placeName : m.myData.groupKey;
+        if (!groups[key]) { groups[key] = []; }
+        groups[key].push(m);
+      });
+      currentBibGroups = groups;
+      
+      // Build summary title.
+      let bibName = "";
+      if (filters.bibRefFilterType === "book") {
+        bibName = filters.bibRefBook + (filters.bibRefChapter ? " " + filters.bibRefChapter : "");
+      } else if (filters.bibRefFilterType === "parsha") {
+        bibName = filters.bibRefParsha;
+      } else {
+        bibName = "all";
+      }
+      
+      // Get unique selected states from the filter.
+      let selectedStatesArr = [];
+      if (filters.selectedStates && filters.selectedStates.length > 0) {
+        selectedStatesArr = [...new Set(filters.selectedStates.map(s => titleCase(s)))];
+      }
+      // If none are selected OR if all states are selected (by comparing to usStatesSet), then omit state list.
+      let summaryTitle = "";
+      if (selectedStatesArr.length === 0 || selectedStatesArr.length === usStatesSet.size) {
+        summaryTitle = "Biblical Places Names from " + bibName;
+      } else {
+        const stateTitle = formatStateList(selectedStatesArr);
+        summaryTitle = "Biblical Places Names from " + bibName + " in " + stateTitle;
+      }
+      
+      if(document.getElementById("bibSummaryTitle")){
+        document.getElementById("bibSummaryTitle").innerText = summaryTitle;
+      }
+      if(document.getElementById("bibSummaryTitle_mobile")){
+        document.getElementById("bibSummaryTitle_mobile").innerText = summaryTitle;
+      }
+      
+      // Build HTML summary list.
+      let html = "<ul class='list-group'>";
+      for (const group in groups) {
+        html += `<li class="list-group-item">
+          <a href="#" onclick="showBibGroupDetailsCustom('${group}'); return false;">${group}</a>
+          <span class="badge bg-secondary float-end">${groups[group].length}</span>
+        </li>`;
+      }
+      html += "</ul>";
+      if(document.getElementById("bibPlacesList")){
+        document.getElementById("bibPlacesList").innerHTML = html;
+      }
+      if(document.getElementById("bibPlacesList_mobile")){
+        document.getElementById("bibPlacesList_mobile").innerHTML = html;
+      }
+    }
+
+    // When a biblical group link is clicked, show modal details.
+    window.showBibGroupDetailsCustom = function(groupTitle) {
+      const groupMarkers = currentBibGroups[groupTitle] || [];
+      let modalHtml = "";
+      if (groupMarkers.length === 0) {
+        modalHtml = "<p>No markers found for this group.</p>";
+      } else {
+        modalHtml = "<ul class='list-group'>";
+        groupMarkers.forEach(m => {
+          const d = m.myData;
+          modalHtml += `<li class="list-group-item">
+            <strong>${d.label}</strong> (${d.state})
+            <button class="btn btn-sm btn-primary float-end" onclick="flyToLocation(${d.lat}, ${d.lng}, '${d.label.replace(/'/g, "\\'")}', 'US Biblical')">Fly To</button>
+          </li>`;
+        });
+        modalHtml += "</ul>";
+      }
+      document.getElementById("bibGroupModalLabel").innerText = groupTitle + " Details";
+      document.getElementById("bibGroupModalBody").innerHTML = modalHtml;
+      let modal = new bootstrap.Modal(document.getElementById('bibGroupModal'));
+      modal.show();
+    };
+
+    /*************************************
      * MARKER FILTERING & BUILDING
      *************************************/
     function updateMarkersVisibility() {
@@ -830,6 +977,9 @@
         map.removeLayer(newBiblicalLayerGroup);
         map.removeLayer(bothBiblicalLayerGroup);
       }
+      
+      // Update the Biblical Places Summary view.
+      updateBiblicalPlacesSummary();
     }
 
     /*************************************
@@ -858,8 +1008,7 @@
     /*************************************
      * BUILD FILTER PANEL (States)
      *************************************/
-    // Global object to store paired state checkboxes:
-    const stateCheckboxes = {}; // key: state (lowercase) -> { desktop, mobile }
+    const stateCheckboxes = {};
     function buildStateFilters() {
       const initialFilters = getInitialFiltersFromUrl();
       const states = Array.from(usStatesSet).sort();
@@ -871,7 +1020,7 @@
         const stateLower = state.toLowerCase();
         const isChecked = initialFilters.states ? initialFilters.states.includes(stateLower) : true;
         
-        // Create desktop checkbox container
+        // Desktop checkbox container
         const divDesktop = document.createElement("div");
         divDesktop.className = "state-item";
         const checkboxDesktop = document.createElement("input");
@@ -887,7 +1036,6 @@
         onlyBtnDesktop.className = "btn btn-sm btn-link only-btn";
         onlyBtnDesktop.innerText = "Only";
         onlyBtnDesktop.addEventListener("click", function() {
-          // Uncheck all desktop and mobile checkboxes, then check this one.
           Object.values(stateCheckboxes).forEach(pair => {
             pair.desktop.checked = false;
             if(pair.mobile) pair.mobile.checked = false;
@@ -911,7 +1059,7 @@
         divDesktop.appendChild(onlyBtnDesktop);
         containerDesktop.appendChild(divDesktop);
         
-        // Create mobile checkbox container (structure similar to desktop)
+        // Mobile checkbox container
         const divMobile = document.createElement("div");
         divMobile.className = "state-item";
         const checkboxMobile = document.createElement("input");
@@ -950,11 +1098,9 @@
         divMobile.appendChild(onlyBtnMobile);
         containerMobile.appendChild(divMobile);
         
-        // Save paired references
         stateCheckboxes[stateLower] = { desktop: checkboxDesktop, mobile: checkboxMobile };
       });
       
-      // "Select All" buttons:
       document.getElementById("selectAllStates").addEventListener("click", function() {
         Object.values(stateCheckboxes).forEach(pair => {
           pair.desktop.checked = true;
@@ -1078,7 +1224,7 @@
     /*************************************
      * EVENT LISTENERS FOR FILTER CONTROLS
      *************************************/
-    // Sync paired controls:
+    // Sync paired controls.
     syncControl("toggleUSUK", "toggleUSUK_mobile");
     syncControl("toggleUSBiblical", "toggleUSBiblical_mobile");
     syncControl("testamentFilter", "testamentFilter_mobile");
@@ -1194,16 +1340,16 @@
       });
     }
     fetch('books_parshas.json')
-  .then(response => response.json())
-  .then(data => {
-    booksData = data.books;
-    parshaDataLoaded = data.parshaData;
-    populateBibRefBookDropdown();
-    populateParshaDropdown();
-    // Now that the biblical dropdowns are populated, apply URL filters:
-    applyFiltersFromUrl();
-  })
-  .catch(error => console.error('Error loading books_parshas.json:', error));
+      .then(response => response.json())
+      .then(data => {
+        booksData = data.books;
+        parshaDataLoaded = data.parshaData;
+        populateBibRefBookDropdown();
+        populateParshaDropdown();
+        // Now that the biblical dropdowns are populated, apply URL filters:
+        applyFiltersFromUrl();
+      })
+      .catch(error => console.error('Error loading books_parshas.json:', error));
 
     /*************************************
      * INITIAL UI SETUP
