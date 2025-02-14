@@ -1194,21 +1194,22 @@
       });
     }
     fetch('books_parshas.json')
-      .then(response => response.json())
-      .then(data => {
-        booksData = data.books;
-        parshaDataLoaded = data.parshaData;
-        populateBibRefBookDropdown();
-        populateParshaDropdown();
-      })
-      .catch(error => console.error('Error loading books_parshas.json:', error));
+  .then(response => response.json())
+  .then(data => {
+    booksData = data.books;
+    parshaDataLoaded = data.parshaData;
+    populateBibRefBookDropdown();
+    populateParshaDropdown();
+    // Now that the biblical dropdowns are populated, apply URL filters:
+    applyFiltersFromUrl();
+  })
+  .catch(error => console.error('Error loading books_parshas.json:', error));
 
     /*************************************
      * INITIAL UI SETUP
      *************************************/
     buildFilterPanel();
     setupCitySearch();
-    document.addEventListener("DOMContentLoaded", applyFiltersFromUrl);
   })();
   </script>
 
