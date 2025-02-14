@@ -55,6 +55,17 @@
       max-height: 300px;
       overflow-y: auto;
     }
+    /* US States filter item styling */
+    .state-item {
+      margin-bottom: 5px;
+    }
+    .state-item label {
+      margin-left: 4px;
+    }
+    .state-item button.only-btn {
+      margin-left: 6px;
+      font-size: 0.75rem;
+    }
   </style>
 </head>
 <body>
@@ -241,10 +252,10 @@
       return cleaned;
     }
     function titleCase(str) {
-  return str.replace(/\w\S*/g, function(txt) {
-    return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-  });
-}
+      return str.replace(/\w\S*/g, function(txt) {
+        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+      });
+    }
     function parseCoordinates(coordStr, swap = false) {
       coordStr = coordStr.trim();
       if (!coordStr) return [];
@@ -260,26 +271,20 @@
       if (t.indexOf("new") !== -1) return "new";
       return "both";
     }
-    // Normalize biblical book names (e.g. "jonahum" to "jonah").
-    // Normalizes biblical book names so that variations like "ii kings", "2 kings", or "2kings" are all returned as "II Kings" (and similarly for Samuel and Chronicles).
-// Normalize biblical book names so that variations like "ii kings", "2 kings", or "2kings" are returned as "II Kings" (and similarly for Samuel and Chronicles).
-function normalizeBiblicalBook(book) {
-  const b = book.trim().toLowerCase();
-  if (b === "jonahum") return "Jonah";
-  if (b === "ii kings" || b === "2 kings" || b === "2kings") return "II Kings";
-  if (b === "ii samuel" || b === "2 samuel" || b === "2samuel") return "II Samuel";
-  if (b === "ii chronicles" || b === "2 chronicles" || b === "2chronicles") return "II Chronicles";
-  // For all other books, return in Title Case.
-  return b.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-}
-    // Parse a biblical reference (e.g., "Genesis 1:1") and normalize the book.
+    function normalizeBiblicalBook(book) {
+      const b = book.trim().toLowerCase();
+      if (b === "jonahum") return "Jonah";
+      if (b === "ii kings" || b === "2 kings" || b === "2kings") return "II Kings";
+      if (b === "ii samuel" || b === "2 samuel" || b === "2samuel") return "II Samuel";
+      if (b === "ii chronicles" || b === "2 chronicles" || b === "2chronicles") return "II Chronicles";
+      return b.split(" ").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+    }
     function parseReference(ref) {
       const match = ref.match(/^([\D]+)[\s:]+(\d+):(\d+)/);
       if (!match) return null;
       const book = normalizeBiblicalBook(match[1].trim());
       return { book: book, chapter: parseInt(match[2]), verse: parseInt(match[3]) };
     }
-    // Parse a reference range string (e.g., "Genesis 1:1-2:3").
     function parseRange(rangeStr) {
       const match = rangeStr.match(/^([\D]+)[\s]+(\d+):(\d+)-(\d+):(\d+)/);
       if (!match) return null;
@@ -299,132 +304,120 @@ function normalizeBiblicalBook(book) {
       if (ref.chapter === range.endChapter && ref.verse > range.endVerse) return false;
       return true;
     }
-    // Build biblical popup content and highlight matching verses based on the "Book/Chapter" filter.
-// If the filter type is "book" and no chapter is provided, then all references from the selected book will be highlighted.
-function buildBiblicalPopupContent(refString) {
-  if (!refString) return "";
-  const refs = refString.split(",").map(r => r.trim()).filter(r => r);
-  const groups = { old: {}, new: {} };
+    function buildBiblicalPopupContent(refString) {
+      if (!refString) return "";
+      const refs = refString.split(",").map(r => r.trim()).filter(r => r);
+      const groups = { old: {}, new: {} };
 
-  // Set of New Testament abbreviations (in lowercase)
-  const ntAbbr = new Set([
-    "matt", "mark", "luke", "john", "acts", "rom",
-    "1 cor", "2 cor", "gal", "eph", "phil", "col",
-    "1 thess", "2 thess", "1 tim", "2 tim", "titus",
-    "philem", "heb", "james", "1 pet", "2 pet",
-    "1 john", "2 john", "3 john", "jude", "rev"
-  ]);
+      const ntAbbr = new Set([
+        "matt", "mark", "luke", "john", "acts", "rom",
+        "1 cor", "2 cor", "gal", "eph", "phil", "col",
+        "1 thess", "2 thess", "1 tim", "2 tim", "titus",
+        "philem", "heb", "james", "1 pet", "2 pet",
+        "1 john", "2 john", "3 john", "jude", "rev"
+      ]);
 
-  // Get the current biblical filter settings
-  const filters = getFilterSettings();
-  const filterType = filters.bibRefFilterType;
-  let selectedBook = null, selectedChapter = null, selectedParsha = null, parshaRange = null;
-  if (filterType === "book" && filters.bibRefBook) {
-    selectedBook = normalizeBiblicalBook(filters.bibRefBook);
-    if (filters.bibRefChapter) {
-      selectedChapter = parseInt(filters.bibRefChapter);
-    }
-  } else if (filterType === "parsha" && filters.bibRefParsha && parshaDataLoaded[filters.bibRefParsha]) {
-    selectedParsha = filters.bibRefParsha;
-    const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
-    parshaRange = parseRange(rangeStr);
-  }
-
-  refs.forEach(ref => {
-    const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
-    if (match) {
-      const rawBook = match[1].trim();
-      const normalizedBook = normalizeBiblicalBook(rawBook);
-      const verses = match[2].trim();
-      const testament = ntAbbr.has(normalizedBook.toLowerCase()) ? "new" : "old";
-
-      // Determine if this reference should be highlighted.
-      let highlight = false;
-      if (filterType === "book" && selectedBook && normalizedBook === selectedBook) {
-        if (selectedChapter) {
-          // If a chapter is provided, highlight only if the chapter matches.
-          const chapMatch = ref.match(/^([\D]+)[\s:]+(\d+):/);
-          if (chapMatch && parseInt(chapMatch[2]) === selectedChapter) {
-            highlight = true;
-          }
-        } else {
-          // No chapter provided—highlight all references from the selected book.
-          highlight = true;
+      const filters = getFilterSettings();
+      const filterType = filters.bibRefFilterType;
+      let selectedBook = null, selectedChapter = null, selectedParsha = null, parshaRange = null;
+      if (filterType === "book" && filters.bibRefBook) {
+        selectedBook = normalizeBiblicalBook(filters.bibRefBook);
+        if (filters.bibRefChapter) {
+          selectedChapter = parseInt(filters.bibRefChapter);
         }
-      } else if (filterType === "parsha" && parshaRange) {
-        // For parsha filtering, highlight if the reference falls within the parsha range.
-        const parsedRef = parseReference(ref);
-        if (parsedRef && refInRange(parsedRef, parshaRange)) {
-          highlight = true;
-        }
+      } else if (filterType === "parsha" && filters.bibRefParsha && parshaDataLoaded[filters.bibRefParsha]) {
+        selectedParsha = filters.bibRefParsha;
+        const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
+        parshaRange = parseRange(rangeStr);
       }
 
-      const displayVerses = highlight ? `<span style="background:yellow">${verses}</span>` : verses;
-      if (!groups[testament][normalizedBook]) {
-        groups[testament][normalizedBook] = [];
-      }
-      groups[testament][normalizedBook].push(displayVerses);
-    }
-  });
-
-  let html = "";
-  if (Object.keys(groups.old).length > 0) {
-    html += "<div><h6>Old Testament</h6><ul>";
-    for (const book in groups.old) {
-      html += `<li><strong>${book}:</strong> ${groups.old[book].join(", ")}</li>`;
-    }
-    html += "</ul></div>";
-  }
-  if (Object.keys(groups.new).length > 0) {
-    html += "<div><h6>New Testament</h6><ul>";
-    for (const book in groups.new) {
-      html += `<li><strong>${book}:</strong> ${groups.new[book].join(", ")}</li>`;
-    }
-    html += "</ul></div>";
-  }
-  return html;
-}
-    // Returns true if a marker's biblical references pass the current biblical filter.
-    // Update marker filtering so that when the filter type is "book", it returns true if at least one reference
-// in the marker matches the selected book. If a chapter is provided, then it requires an exact chapter match.
-function markerPassesBibRefFilter(marker) {
-  const filters = getFilterSettings();
-  if (filters.bibRefFilterType === "none") return true;
-  const refs = marker.myData.biblicalReferences;
-  if (!refs) return false;
-  const refList = refs.split(",").map(r => r.trim()).filter(r => r);
-  
-  if (filters.bibRefFilterType === "book") {
-    const selectedBook = normalizeBiblicalBook(filters.bibRefBook);
-    if (!selectedBook) return true;
-    if (!filters.bibRefChapter) {
-      // No chapter provided—pass if any reference starts with the selected book.
-      return refList.some(ref => ref.toLowerCase().startsWith(selectedBook.toLowerCase()));
-    } else {
-      const selectedChapter = parseInt(filters.bibRefChapter);
-      return refList.some(ref => {
-        const match = ref.match(/^([\D]+)[\s:]+(\d+):/);
+      refs.forEach(ref => {
+        const match = ref.match(/^([\D]+)[\s:]+(\d+:\d+(?:-\d+)?)$/);
         if (match) {
-          const book = normalizeBiblicalBook(match[1].trim());
-          const chapter = parseInt(match[2]);
-          return book === selectedBook && chapter === selectedChapter;
+          const rawBook = match[1].trim();
+          const normalizedBook = normalizeBiblicalBook(rawBook);
+          const verses = match[2].trim();
+          const testament = ntAbbr.has(normalizedBook.toLowerCase()) ? "new" : "old";
+
+          let highlight = false;
+          if (filterType === "book" && selectedBook && normalizedBook === selectedBook) {
+            if (selectedChapter) {
+              const chapMatch = ref.match(/^([\D]+)[\s:]+(\d+):/);
+              if (chapMatch && parseInt(chapMatch[2]) === selectedChapter) {
+                highlight = true;
+              }
+            } else {
+              highlight = true;
+            }
+          } else if (filterType === "parsha" && parshaRange) {
+            const parsedRef = parseReference(ref);
+            if (parsedRef && refInRange(parsedRef, parshaRange)) {
+              highlight = true;
+            }
+          }
+
+          const displayVerses = highlight ? `<span style="background:yellow">${verses}</span>` : verses;
+          if (!groups[testament][normalizedBook]) {
+            groups[testament][normalizedBook] = [];
+          }
+          groups[testament][normalizedBook].push(displayVerses);
         }
-        return false;
       });
+
+      let html = "";
+      if (Object.keys(groups.old).length > 0) {
+        html += "<div><h6>Old Testament</h6><ul>";
+        for (const book in groups.old) {
+          html += `<li><strong>${book}:</strong> ${groups.old[book].join(", ")}</li>`;
+        }
+        html += "</ul></div>";
+      }
+      if (Object.keys(groups.new).length > 0) {
+        html += "<div><h6>New Testament</h6><ul>";
+        for (const book in groups.new) {
+          html += `<li><strong>${book}:</strong> ${groups.new[book].join(", ")}</li>`;
+        }
+        html += "</ul></div>";
+      }
+      return html;
     }
-  } else if (filters.bibRefFilterType === "parsha") {
-    const selectedParsha = filters.bibRefParsha;
-    if (!selectedParsha || !parshaDataLoaded[selectedParsha]) return true;
-    const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
-    const range = parseRange(rangeStr);
-    if (!range) return false;
-    return refList.some(ref => {
-      const parsedRef = parseReference(ref);
-      return parsedRef && refInRange(parsedRef, range);
-    });
-  }
-  return true;
-}
+    function markerPassesBibRefFilter(marker) {
+      const filters = getFilterSettings();
+      if (filters.bibRefFilterType === "none") return true;
+      const refs = marker.myData.biblicalReferences;
+      if (!refs) return false;
+      const refList = refs.split(",").map(r => r.trim()).filter(r => r);
+      
+      if (filters.bibRefFilterType === "book") {
+        const selectedBook = normalizeBiblicalBook(filters.bibRefBook);
+        if (!selectedBook) return true;
+        if (!filters.bibRefChapter) {
+          return refList.some(ref => ref.toLowerCase().startsWith(selectedBook.toLowerCase()));
+        } else {
+          const selectedChapter = parseInt(filters.bibRefChapter);
+          return refList.some(ref => {
+            const match = ref.match(/^([\D]+)[\s:]+(\d+):/);
+            if (match) {
+              const book = normalizeBiblicalBook(match[1].trim());
+              const chapter = parseInt(match[2]);
+              return book === selectedBook && chapter === selectedChapter;
+            }
+            return false;
+          });
+        }
+      } else if (filters.bibRefFilterType === "parsha") {
+        const selectedParsha = filters.bibRefParsha;
+        if (!selectedParsha || !parshaDataLoaded[selectedParsha]) return true;
+        const rangeStr = parshaDataLoaded[selectedParsha]["Whole Parsha"];
+        const range = parseRange(rangeStr);
+        if (!range) return false;
+        return refList.some(ref => {
+          const parsedRef = parseReference(ref);
+          return parsedRef && refInRange(parsedRef, range);
+        });
+      }
+      return true;
+    }
 
     /*************************************
      * URL FILTER FUNCTIONS
@@ -513,12 +506,6 @@ function markerPassesBibRefFilter(marker) {
           document.getElementById("bibRefBookChapter").style.display = "none";
           document.getElementById("bibRefParsha").style.display = "none";
         }
-      }
-      if (initial.states) {
-        const stateCheckboxesDesktop = document.querySelectorAll("#us-states-filter input[type=checkbox]");
-        stateCheckboxesDesktop.forEach(cb => { cb.checked = initial.states.includes(cb.value.toLowerCase()); });
-        const stateCheckboxesMobile = document.querySelectorAll("#us-states-filter-mobile input[type=checkbox]");
-        stateCheckboxesMobile.forEach(cb => { cb.checked = initial.states.includes(cb.value.toLowerCase()); });
       }
       updateMarkersVisibility();
     }
@@ -846,57 +833,147 @@ function markerPassesBibRefFilter(marker) {
     }
 
     /*************************************
+     * SYNC HELPER FOR PAIRED CONTROLS
+     *************************************/
+    function syncControl(desktopId, mobileId) {
+      const desktopEl = document.getElementById(desktopId);
+      const mobileEl = document.getElementById(mobileId);
+      if (!desktopEl || !mobileEl) return;
+      desktopEl.addEventListener("change", function() {
+        if (desktopEl.type === "checkbox") {
+          mobileEl.checked = desktopEl.checked;
+        } else {
+          mobileEl.value = desktopEl.value;
+        }
+      });
+      mobileEl.addEventListener("change", function() {
+        if (mobileEl.type === "checkbox") {
+          desktopEl.checked = mobileEl.checked;
+        } else {
+          desktopEl.value = mobileEl.value;
+        }
+      });
+    }
+
+    /*************************************
      * BUILD FILTER PANEL (States)
      *************************************/
-    function buildFilterPanel() {
+    // Global object to store paired state checkboxes:
+    const stateCheckboxes = {}; // key: state (lowercase) -> { desktop, mobile }
+    function buildStateFilters() {
       const initialFilters = getInitialFiltersFromUrl();
-      const container = document.getElementById("us-states-filter");
-      container.innerHTML = "";
       const states = Array.from(usStatesSet).sort();
-      console.log("Building desktop filter panel with states:", states);
+      const containerDesktop = document.getElementById("us-states-filter");
+      const containerMobile = document.getElementById("us-states-filter-mobile");
+      containerDesktop.innerHTML = "";
+      containerMobile.innerHTML = "";
       states.forEach(state => {
-        const checkboxId = "state-" + state.replace(/\s+/g, "_");
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.id = checkboxId;
-        checkbox.value = state;
-        checkbox.checked = initialFilters.states ? initialFilters.states.includes(state.toLowerCase()) : true;
-        checkbox.addEventListener("change", () => { updateUrlWithFilters(); updateMarkersVisibility(); });
-        container.appendChild(checkbox);
-        const label = document.createElement("label");
-        label.htmlFor = checkboxId;
-        label.innerText = " " + titleCase(state);
-        container.appendChild(label);
-        const onlyBtn = document.createElement("button");
-        onlyBtn.type = "button";
-        onlyBtn.className = "btn btn-sm btn-link ms-1";
-        onlyBtn.innerText = "Only";
-        onlyBtn.addEventListener("click", function() {
-          container.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = false; });
-          checkbox.checked = true;
+        const stateLower = state.toLowerCase();
+        const isChecked = initialFilters.states ? initialFilters.states.includes(stateLower) : true;
+        
+        // Create desktop checkbox container
+        const divDesktop = document.createElement("div");
+        divDesktop.className = "state-item";
+        const checkboxDesktop = document.createElement("input");
+        checkboxDesktop.type = "checkbox";
+        checkboxDesktop.value = state;
+        checkboxDesktop.id = "state-desktop-" + stateLower;
+        checkboxDesktop.checked = isChecked;
+        const labelDesktop = document.createElement("label");
+        labelDesktop.htmlFor = checkboxDesktop.id;
+        labelDesktop.innerText = " " + titleCase(state);
+        const onlyBtnDesktop = document.createElement("button");
+        onlyBtnDesktop.type = "button";
+        onlyBtnDesktop.className = "btn btn-sm btn-link only-btn";
+        onlyBtnDesktop.innerText = "Only";
+        onlyBtnDesktop.addEventListener("click", function() {
+          // Uncheck all desktop and mobile checkboxes, then check this one.
+          Object.values(stateCheckboxes).forEach(pair => {
+            pair.desktop.checked = false;
+            if(pair.mobile) pair.mobile.checked = false;
+          });
+          checkboxDesktop.checked = true;
+          if(stateCheckboxes[stateLower] && stateCheckboxes[stateLower].mobile) {
+            stateCheckboxes[stateLower].mobile.checked = true;
+          }
           updateUrlWithFilters();
           updateMarkersVisibility();
         });
-        container.appendChild(onlyBtn);
-        container.appendChild(document.createElement("br"));
+        checkboxDesktop.addEventListener("change", function() {
+          if (stateCheckboxes[stateLower] && stateCheckboxes[stateLower].mobile) {
+            stateCheckboxes[stateLower].mobile.checked = checkboxDesktop.checked;
+          }
+          updateUrlWithFilters();
+          updateMarkersVisibility();
+        });
+        divDesktop.appendChild(checkboxDesktop);
+        divDesktop.appendChild(labelDesktop);
+        divDesktop.appendChild(onlyBtnDesktop);
+        containerDesktop.appendChild(divDesktop);
+        
+        // Create mobile checkbox container (structure similar to desktop)
+        const divMobile = document.createElement("div");
+        divMobile.className = "state-item";
+        const checkboxMobile = document.createElement("input");
+        checkboxMobile.type = "checkbox";
+        checkboxMobile.value = state;
+        checkboxMobile.id = "state-mobile-" + stateLower;
+        checkboxMobile.checked = isChecked;
+        const labelMobile = document.createElement("label");
+        labelMobile.htmlFor = checkboxMobile.id;
+        labelMobile.innerText = " " + titleCase(state);
+        const onlyBtnMobile = document.createElement("button");
+        onlyBtnMobile.type = "button";
+        onlyBtnMobile.className = "btn btn-sm btn-link only-btn";
+        onlyBtnMobile.innerText = "Only";
+        onlyBtnMobile.addEventListener("click", function() {
+          Object.values(stateCheckboxes).forEach(pair => {
+            pair.desktop.checked = false;
+            if(pair.mobile) pair.mobile.checked = false;
+          });
+          checkboxMobile.checked = true;
+          if(stateCheckboxes[stateLower] && stateCheckboxes[stateLower].desktop) {
+            stateCheckboxes[stateLower].desktop.checked = true;
+          }
+          updateUrlWithFilters();
+          updateMarkersVisibility();
+        });
+        checkboxMobile.addEventListener("change", function() {
+          if (stateCheckboxes[stateLower] && stateCheckboxes[stateLower].desktop) {
+            stateCheckboxes[stateLower].desktop.checked = checkboxMobile.checked;
+          }
+          updateUrlWithFilters();
+          updateMarkersVisibility();
+        });
+        divMobile.appendChild(checkboxMobile);
+        divMobile.appendChild(labelMobile);
+        divMobile.appendChild(onlyBtnMobile);
+        containerMobile.appendChild(divMobile);
+        
+        // Save paired references
+        stateCheckboxes[stateLower] = { desktop: checkboxDesktop, mobile: checkboxMobile };
       });
+      
+      // "Select All" buttons:
       document.getElementById("selectAllStates").addEventListener("click", function() {
-        container.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = true; });
+        Object.values(stateCheckboxes).forEach(pair => {
+          pair.desktop.checked = true;
+          if(pair.mobile) pair.mobile.checked = true;
+        });
         updateUrlWithFilters();
         updateMarkersVisibility();
       });
-      const mobileContainer = document.getElementById("us-states-filter-mobile");
-      if (mobileContainer) {
-        mobileContainer.innerHTML = container.innerHTML;
-        mobileContainer.querySelectorAll("input[type=checkbox]").forEach(checkbox => {
-          checkbox.addEventListener("change", () => { updateUrlWithFilters(); updateMarkersVisibility(); });
+      document.getElementById("selectAllStates_mobile").addEventListener("click", function() {
+        Object.values(stateCheckboxes).forEach(pair => {
+          pair.desktop.checked = true;
+          if(pair.mobile) pair.mobile.checked = true;
         });
-        document.getElementById("selectAllStates_mobile").addEventListener("click", function() {
-          mobileContainer.querySelectorAll("input[type=checkbox]").forEach(inp => { inp.checked = true; });
-          updateUrlWithFilters();
-          updateMarkersVisibility();
-        });
-      }
+        updateUrlWithFilters();
+        updateMarkersVisibility();
+      });
+    }
+    function buildFilterPanel() {
+      buildStateFilters();
     }
 
     /*************************************
@@ -1001,6 +1078,15 @@ function markerPassesBibRefFilter(marker) {
     /*************************************
      * EVENT LISTENERS FOR FILTER CONTROLS
      *************************************/
+    // Sync paired controls:
+    syncControl("toggleUSUK", "toggleUSUK_mobile");
+    syncControl("toggleUSBiblical", "toggleUSBiblical_mobile");
+    syncControl("testamentFilter", "testamentFilter_mobile");
+    syncControl("bibRefFilterType", "bibRefFilterType_mobile");
+    syncControl("bibRefBook", "bibRefBook_mobile");
+    syncControl("bibRefChapter", "bibRefChapter_mobile");
+    syncControl("bibRefParshaSelect", "bibRefParshaSelect_mobile");
+
     document.getElementById("toggleUSUK").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     document.getElementById("toggleUSBiblical").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     if (document.getElementById("toggleUSUK_mobile")) {
@@ -1013,7 +1099,6 @@ function markerPassesBibRefFilter(marker) {
     if (document.getElementById("testamentFilter_mobile")) {
       document.getElementById("testamentFilter_mobile").addEventListener("change", () => { updateMarkersVisibility(); updateUrlWithFilters(); });
     }
-    // Add listeners for the biblical reference dropdowns and input fields (desktop)
     document.getElementById("bibRefFilterType").addEventListener("change", function() {
       const value = this.value.toLowerCase();
       if (value === "book") {
@@ -1041,7 +1126,6 @@ function markerPassesBibRefFilter(marker) {
       updateUrlWithFilters();
       updateMarkersVisibility();
     });
-    // And similarly for mobile:
     if (document.getElementById("bibRefFilterType_mobile")) {
       document.getElementById("bibRefFilterType_mobile").addEventListener("change", function() {
         const value = this.value.toLowerCase();
